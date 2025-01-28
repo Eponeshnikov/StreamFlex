@@ -14,20 +14,32 @@ logger_init()
 
 
 def load_monitor():
+    """
+    Display real-time CPU and memory usage metrics using Streamlit components.
+
+    This function creates a two-column layout to show:
+    1. CPU usage as a percentage and progress bar
+    2. Memory usage as a percentage and progress bar
+
+    It also displays warning messages if CPU or memory usage exceeds 90%.
+
+    Note:
+    This function relies on the Streamlit (st) and psutil libraries to be imported and available.
+    """
     # CPU Usage
     cpu_col, mem_col = st.columns(2)
     with cpu_col:
         cpu_percent = psutil.cpu_percent()
         st.metric("CPU Usage", f"{cpu_percent}%")
         st.progress(cpu_percent / 100)
-    
+
     # Memory Usage
     with mem_col:
         mem = psutil.virtual_memory()
         mem_percent = mem.percent
         st.metric("Memory Usage", f"{mem_percent}%")
         st.progress(mem_percent / 100)
-    
+
     # Optional: Add warning thresholds
     if cpu_percent > 90:
         st.error("High CPU usage detected!")

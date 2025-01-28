@@ -25,7 +25,8 @@ class PluginManager:
         self.plugins_dir = Path(plugins_dir)
         self.plugins = {}
 
-        self.logger.info("Initializing PluginManager", plugins_dir=str(self.plugins_dir))
+        self.logger.info(f"Initializing PluginManager", plugins_dir=str(self.plugins_dir))
+        self.logger.info(f"Pluginsdir: {self.plugins_dir}")
         self.plugins_dir.mkdir(parents=True, exist_ok=True)
         self.logger.debug("Created plugins directory if not exists")
 
@@ -65,18 +66,18 @@ class PluginManager:
                 continue
 
             try:
-                self.logger.info("Loading plugin", plugin=plugin_name)
+                self.logger.info(f"Loading plugin {plugin_name}", plugin=plugin_name)
                 spec = importlib.util.spec_from_file_location(plugin_name, str(module_path))
                 module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(module)
-                self.logger.debug("Module loaded successfully", module=module.__name__)
+                self.logger.debug(f"Module {module.__name__} loaded successfully", module=module.__name__)
 
                 for attr_name in dir(module):
                     attr = getattr(module, attr_name)
                     if (isinstance(attr, type) and 
                         issubclass(attr, Plugin) and 
                         attr != Plugin):
-                        self.logger.debug("Found Plugin subclass", class_name=attr.__name__)
+                        self.logger.debug(f"Found Plugin subclass {attr.__name__}", class_name=attr.__name__)
                         plugin = attr()
                         plugin_name = plugin.get_name()
 

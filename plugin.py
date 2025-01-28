@@ -1,13 +1,22 @@
 from abc import ABC, abstractmethod
 import toml
+import os
 from pathlib import Path
 from loguru import logger
 import streamlit as st
 
-class Plugin(ABC):
+class Plugin:
     def __init__(self):
         self.logger = logger.bind(class_name=self.__class__.__name__)
-        
+        try:
+            self.file = self.file if self.file is not None else __file__
+            self.logger.debug(f"Determined plugin file path: {self.file}", file=self.file)
+            self.default_path = False
+        except AttributeError:
+            self.file = __file__
+            self.logger.warning(f"Unable to determine plugin file path, use default {self.file}", file=self.file)
+            self.default_path = True
+
         if self.__class__ is Plugin:
             self.logger.error("Cannot instantiate base Plugin class")
             raise RuntimeError("Base Plugin class cannot be instantiated")
@@ -18,13 +27,12 @@ class Plugin(ABC):
         """Robust config loading with project-level fallback"""
         # Get project root relative to this file location
         project_root = Path(__file__).resolve().parent
-
-        plugin_dir = project_root / "plugins" / self.__class__.__name__
+        plugin_dir = project_root / "plugins" / self.__class__.__name__ if self.default_path else Path(os.path.dirname(self.file)).resolve()
         config_dir = plugin_dir / "configs"
         config_path = config_dir / "config.toml"
         
         # Default values
-        default_name = self.__class__.__name__
+        default_name = self.__class__.__name__ if self.default_path else os.path.basename(os.path.dirname(self.file))
         default_version = "0.0.0"
         
         # Ensure directory structure exists
@@ -52,7 +60,6 @@ class Plugin(ABC):
     def get_version(self):
         return self._version
     
-    @abstractmethod
     def run(self, data_manager, widget_manager):
         pass
     
