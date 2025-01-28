@@ -1,21 +1,59 @@
-import logging
 from abc import ABC, abstractmethod
+import toml
+from pathlib import Path
+from loguru import logger
 import streamlit as st
 
 class Plugin(ABC):
     def __init__(self):
-        self.logger = logging.getLogger(self.__class__.__name__)
+        self.logger = logger.bind(class_name=self.__class__.__name__)
         
-    @abstractmethod
-    def run(self, data_manager, config_manager, widget_manager):
-        pass
+        if self.__class__ is Plugin:
+            self.logger.error("Cannot instantiate base Plugin class")
+            raise RuntimeError("Base Plugin class cannot be instantiated")
+        
+        self._load_config()
     
-    @abstractmethod
+    def _load_config(self):
+        """Robust config loading with project-level fallback"""
+        # Get project root relative to this file location
+        project_root = Path(__file__).resolve().parent
+
+        plugin_dir = project_root / "plugins" / self.__class__.__name__
+        config_dir = plugin_dir / "configs"
+        config_path = config_dir / "config.toml"
+        
+        # Default values
+        default_name = self.__class__.__name__
+        default_version = "0.0.0"
+        
+        # Ensure directory structure exists
+        config_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Load or create config
+        if config_path.exists():
+            with open(config_path, "r") as f:
+                config = toml.load(f)
+            self._name = config.get("name", default_name)
+            self._version = config.get("version", default_version)
+            self.logger.debug(f"Loaded config from {config_path}")
+        else:
+            self._name = default_name
+            self._version = default_version
+            with open(config_path, "w") as f:
+                toml.dump({"name": self._name, "version": self._version}, f)
+            self.logger.info(f"Created new config at {config_path}")
+
+        self.logger.success(f"Initialized plugin: {self._name} v{self._version}")
+    
     def get_name(self):
-        pass
+        return self._name
+    
+    def get_version(self):
+        return self._version
     
     @abstractmethod
-    def get_version(self):
+    def run(self, data_manager, widget_manager):
         pass
     
     def create_widget(self, widget_manager, widget_type, widget_name, 
