@@ -1,4 +1,5 @@
 import os
+import psutil
 import streamlit as st
 from loguru import logger
 from data_manager import DataManager
@@ -12,12 +13,29 @@ from utils import get_colored_logs, logger_init
 logger_init()
 
 
+def load_monitor():
+    # CPU Usage
+    cpu_col, mem_col = st.columns(2)
+    with cpu_col:
+        cpu_percent = psutil.cpu_percent()
+        st.metric("CPU Usage", f"{cpu_percent}%")
+        st.progress(cpu_percent / 100)
+    
+    # Memory Usage
+    with mem_col:
+        mem = psutil.virtual_memory()
+        mem_percent = mem.percent
+        st.metric("Memory Usage", f"{mem_percent}%")
+        st.progress(mem_percent / 100)
+    
+    # Optional: Add warning thresholds
+    if cpu_percent > 90:
+        st.error("High CPU usage detected!")
+    if mem_percent > 90:
+        st.error("High Memory usage detected!")
+
 def main():
     st.set_page_config(page_title="Dynamic Plugin System", layout="wide")
-    
-    # Add Streamlit logo to sidebar
-    with st.sidebar:
-        st.logo("https://streamlit.io/images/brand/streamlit-mark-color.png", link="https://streamlit.io")
     
     st.title("🎛️ Dynamic Plugin System")
     
@@ -130,35 +148,47 @@ def main():
 
     # Enhanced Debug Section
     with st.sidebar.expander("🔍 Debug Console"):
-        st.write("### 📝 Session State")
-        st.json(st.session_state)
         
-        st.write("### 📟 Terminal Output")
+        st.subheader('📊 System Resources (Beta)')
+        real_time_monitor = st.checkbox("Enable real time monitor", key='real_time_monitor')
+        if real_time_monitor:
+            st.fragment(run_every=1)(load_monitor)()
+        else:
+            load_monitor()
+        tab1, tab2 = st.tabs([
+            '📝 Session State', 
+            '📟 Terminal Output'
+        ])
         
-        # Colored log display with auto-scroll
-        html(
-            f"""
-            <div id="logContainer" 
-                style="
-                    height: 300px;
-                    overflow-y: auto;
-                    background-color: #262730;
-                    color: white;
-                    padding: 10px;
-                    border-radius: 5px;
-                    font-family: monospace;
-                    white-space: pre-wrap;
-                ">
-                {get_colored_logs(100)}
-            </div>
-            <script>
-                // Auto-scroll to bottom
-                var container = document.getElementById('logContainer');
-                container.scrollTop = container.scrollHeight;
-            </script>
-            """,
-            height=300
-        )
+        with tab1:
+            st.json(st.session_state)
+        
+        with tab2:
+            # Colored log display with auto-scroll (existing code)
+            html(
+                f"""
+                <div id="logContainer" 
+                    style="
+                        height: 300px;
+                        overflow-y: auto;
+                        background-color: #262730;
+                        color: white;
+                        padding: 10px;
+                        border-radius: 5px;
+                        font-family: monospace;
+                        white-space: pre-wrap;
+                    ">
+                    {get_colored_logs(100)}
+                </div>
+                <script>
+                    // Auto-scroll to bottom
+                    var container = document.getElementById('logContainer');
+                    container.scrollTop = container.scrollHeight;
+                </script>
+                """,
+                height=300
+            )
+
         
         col1, col2 = st.columns(2)
         with col1:
