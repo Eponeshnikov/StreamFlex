@@ -65,7 +65,7 @@ class Plugin:
                 toml.dump({"name": self._name, "version": self._version}, f)
             self.logger.info(f"Created new config at {config_path}")
 
-        self.logger.success(f"Initialized plugin: {self._name} v{self._version}")
+        self.logger.success(f"Initialized plugin: {self.get_name()} v{self.get_version()}")
 
     def get_name(self):
         return self._name

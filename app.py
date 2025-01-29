@@ -50,7 +50,7 @@ def load_monitor():
 def main():
     st.set_page_config(page_title="Dynamic Plugin System", layout="wide")
 
-    st.title("🎛️ Dynamic Plugin System")
+    st.title("🎛️ StreamFlex")
 
     # Initialize managers with logging
     try:
@@ -135,9 +135,6 @@ def main():
                         logger.error(f"Delete error: {e}")
                         st.error("❌ Failed to delete snapshot")
 
-    # Main Content Area
-    st.header("🔌 Plugin Dashboard")
-
     # Plugin Selection
     available_plugins = [p.get_name() for p in plugin_mgr.get_plugins()]
     selected_plugins = st.multiselect(
@@ -156,7 +153,7 @@ def main():
                 plugin = plugin_mgr.plugins.get(plugin_name)
                 if plugin:
                     try:
-                        st.markdown(f"#### {plugin_name}")
+                        st.subheader(f"_:blue[{plugin_name}]_", divider='blue')
                         plugin.run(data_mgr, widget_mgr)
                         logger.info(f"Executed plugin: {plugin_name}")
                     except Exception as e:
