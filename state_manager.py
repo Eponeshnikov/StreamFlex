@@ -3,6 +3,7 @@ import pickle
 from datetime import datetime
 from loguru import logger
 
+
 class StateManager:
     def __init__(self, snapshots_dir="snapshots"):
         """
@@ -18,7 +19,10 @@ class StateManager:
         """
         self.snapshots_dir = snapshots_dir
         os.makedirs(self.snapshots_dir, exist_ok=True)
-        logger.info("Initializing StateManager with snapshots directory: '{}'", self.snapshots_dir)
+        logger.info(
+            "Initializing StateManager with snapshots directory: '{}'",
+            self.snapshots_dir,
+        )
 
     def save_snapshot(self, snapshot_name, data_mgr, widget_mgr, selected_plugins):
         """
@@ -41,22 +45,22 @@ class StateManager:
             snapshot_data = {
                 "metadata": {
                     "created_at": creation_time,
-                    "selected_plugins": selected_plugins
+                    "selected_plugins": selected_plugins,
                 },
                 "data": data_mgr.export_state(),
-                "widgets": widget_mgr.export_state()
+                "widgets": widget_mgr.export_state(),
             }
 
             logger.debug(
                 "Preparing snapshot '{}' with {} plugins (created at {})",
                 snapshot_name,
                 len(selected_plugins),
-                creation_time.isoformat()
+                creation_time.isoformat(),
             )
 
             # Save to file
             snapshot_path = os.path.join(self.snapshots_dir, f"{snapshot_name}.pkl")
-            with open(snapshot_path, 'wb') as f:
+            with open(snapshot_path, "wb") as f:
                 pickle.dump(snapshot_data, f)
 
             # Log success details
@@ -65,15 +69,13 @@ class StateManager:
                 "Saved snapshot '{}' successfully ({} bytes) to: {}",
                 snapshot_name,
                 file_size,
-                snapshot_path
+                snapshot_path,
             )
             return True
 
         except Exception as e:
             logger.exception(
-                "Failed to save snapshot '{}'! Error: {}",
-                snapshot_name,
-                e
+                "Failed to save snapshot '{}'! Error: {}", snapshot_name, e
             )
             return False
 
@@ -95,7 +97,7 @@ class StateManager:
             snapshot_path = os.path.join(self.snapshots_dir, f"{snapshot_name}.pkl")
             logger.debug("Attempting to load snapshot from: {}", snapshot_path)
 
-            with open(snapshot_path, 'rb') as f:
+            with open(snapshot_path, "rb") as f:
                 snapshot_data = pickle.load(f)
 
             # Log metadata details
@@ -104,7 +106,7 @@ class StateManager:
                 "Loading snapshot '{}' created at {} with {} plugins",
                 snapshot_name,
                 metadata["created_at"].isoformat(),
-                len(metadata["selected_plugins"])
+                len(metadata["selected_plugins"]),
             )
 
             # Restore state
@@ -118,9 +120,7 @@ class StateManager:
 
         except Exception as e:
             logger.exception(
-                "Failed to load snapshot '{}'! Error: {}",
-                snapshot_name,
-                e
+                "Failed to load snapshot '{}'! Error: {}", snapshot_name, e
             )
             return None
 
@@ -143,7 +143,7 @@ class StateManager:
             logger.info(
                 "Found {} snapshots in directory '{}'",
                 len(snapshots),
-                self.snapshots_dir
+                self.snapshots_dir,
             )
             return snapshots
 
@@ -151,7 +151,7 @@ class StateManager:
             logger.exception(
                 "Failed to list snapshots! Directory: '{}' Error: {}",
                 self.snapshots_dir,
-                e
+                e,
             )
             return []
 
@@ -178,23 +178,17 @@ class StateManager:
             if os.path.exists(snapshot_path):
                 os.remove(snapshot_path)
                 logger.success(
-                    "Deleted snapshot '{}' from: {}",
-                    snapshot_name,
-                    snapshot_path
+                    "Deleted snapshot '{}' from: {}", snapshot_name, snapshot_path
                 )
                 return True
 
             logger.warning(
-                "Snapshot '{}' not found at: {}",
-                snapshot_name,
-                snapshot_path
+                "Snapshot '{}' not found at: {}", snapshot_name, snapshot_path
             )
             return False
 
         except Exception as e:
             logger.exception(
-                "Failed to delete snapshot '{}'! Error: {}",
-                snapshot_name,
-                e
+                "Failed to delete snapshot '{}'! Error: {}", snapshot_name, e
             )
             return False

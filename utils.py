@@ -1,8 +1,11 @@
 import os
 import sys
 from loguru import logger
+import pickle
+import hashlib
 
-def get_colored_logs(lines=100, log_dir='logs'):
+
+def get_colored_logs(lines=100, log_dir="logs"):
     """
     Retrieve logs and add color based on log level.
 
@@ -28,7 +31,9 @@ def get_colored_logs(lines=100, log_dir='logs'):
         if not os.path.exists(log_dir):
             return "<span style='color: red'>Logs directory not found</span>"
 
-        log_files = [os.path.join(log_dir, f) for f in os.listdir(log_dir) if f.endswith(".log")]
+        log_files = [
+            os.path.join(log_dir, f) for f in os.listdir(log_dir) if f.endswith(".log")
+        ]
         if not log_files:
             return "<span style='color: yellow'>No log files available</span>"
 
@@ -54,9 +59,9 @@ def get_colored_logs(lines=100, log_dir='logs'):
             return "".join(colored_lines)
     except Exception as e:
         return f"<span style='color: red'>Error reading logs: {str(e)}</span>"
-    
-    
-def logger_init(log_dir='logs'):
+
+
+def logger_init(log_dir="logs"):
     """
     Initialize and configure the logger for both file and console output.
 
@@ -85,7 +90,7 @@ def logger_init(log_dir='logs'):
         retention="12 month",
         level="DEBUG",
         enqueue=True,
-        compression="zip"  # Optional: compress rotated files
+        compression="zip",  # Optional: compress rotated files
     )
 
     logger.add(
@@ -93,3 +98,69 @@ def logger_init(log_dir='logs'):
         level="DEBUG",
         colorize=True,
     )
+
+
+CACHE_FOLDER = ".cache"
+
+
+def generate_cache_filename(func, *args, **kwargs):
+    """
+    Generate a unique cache filename based on the function name, arguments, and keyword arguments.
+
+    This function takes a function object, positional arguments, and keyword arguments as input.
+    It combines the function name, arguments, and keyword arguments into a tuple, serializes the tuple,
+    and computes the SHA-256 hash of the serialized data. The hash is then used to generate a unique
+    filename with a '.pickle' extension. The filename is returned as a string.
+
+    Parameters
+    ----------
+    func (function): The function object for which the cache filename is being generated.
+    *args (tuple): Positional arguments passed to the function.
+    **kwargs (dict): Keyword arguments passed to the function.
+
+    Returns:
+    str: A unique cache filename based on the function name, arguments, and keyword arguments.
+    """
+    combined_data = (func.__name__, args, kwargs)
+    serialized_data = pickle.dumps(combined_data)
+    hash_object = hashlib.sha256(serialized_data)
+    filename = hash_object.hexdigest() + ".pickle"
+    return os.path.join(CACHE_FOLDER, filename)
+
+
+def cache_result(reset=False):
+    """
+    A decorator function that caches the results of a function and stores them in a cache file.
+
+    Parameters
+    ----------
+    reset (bool): If True, the cache file will be deleted and the function will be executed again.
+                  If False (default), the function will attempt to load the result from the cache file.
+
+    Returns:
+    function: The decorated function, which will either return the cached result or execute the function
+              and store the result in the cache file.
+    """
+
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            cache_file = generate_cache_filename(func, *args, **kwargs)
+            if not reset:
+                try:
+                    with open(cache_file, "rb") as file:
+                        cached_data = pickle.load(file)
+                    cached_result = cached_data
+                    return cached_result
+                except (IOError, pickle.PickleError, EOFError):
+                    pass
+            result = func(*args, **kwargs)
+            cached_data = result
+            os.makedirs(CACHE_FOLDER, exist_ok=True)
+            with open(cache_file, "wb") as file:
+                pickle.dump(cached_data, file)
+
+            return result
+
+        return wrapper
+
+    return decorator

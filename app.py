@@ -46,11 +46,12 @@ def load_monitor():
     if mem_percent > 90:
         st.error("High Memory usage detected!")
 
+
 def main():
     st.set_page_config(page_title="Dynamic Plugin System", layout="wide")
-    
+
     st.title("🎛️ Dynamic Plugin System")
-    
+
     # Initialize managers with logging
     try:
         logger.info("Initializing application managers")
@@ -77,7 +78,7 @@ def main():
     # Sidebar Section
     with st.sidebar:
         st.header("📸 Snapshot Management")
-        
+
         # Save Snapshot
         with st.expander("💾 Save Snapshot", expanded=True):
             snapshot_name = st.text_input("Name your snapshot")
@@ -85,7 +86,9 @@ def main():
                 if snapshot_name:
                     try:
                         selected_plugins = st.session_state.get("selected_plugins", [])
-                        if state_mgr.save_snapshot(snapshot_name, data_mgr, widget_mgr, selected_plugins):
+                        if state_mgr.save_snapshot(
+                            snapshot_name, data_mgr, widget_mgr, selected_plugins
+                        ):
                             logger.info(f"Saved snapshot: {snapshot_name}")
                             st.success(f"✅ Saved: {snapshot_name}")
                         else:
@@ -99,13 +102,17 @@ def main():
         # Load/Delete Snapshots
         with st.expander("📂 Manage Snapshots", expanded=True):
             snapshots = state_mgr.list_snapshots()
-            selected_snapshot = st.selectbox("Available snapshots", snapshots, key="snap_sel")
-            
+            selected_snapshot = st.selectbox(
+                "Available snapshots", snapshots, key="snap_sel"
+            )
+
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("📂 Load", key="load_btn"):
                     try:
-                        selected_plugins = state_mgr.load_snapshot(selected_snapshot, data_mgr, widget_mgr)
+                        selected_plugins = state_mgr.load_snapshot(
+                            selected_snapshot, data_mgr, widget_mgr
+                        )
                         if selected_plugins is not None:
                             st.session_state.selected_plugins = selected_plugins
                             logger.info(f"Loaded snapshot: {selected_snapshot}")
@@ -114,7 +121,7 @@ def main():
                     except Exception as e:
                         logger.error(f"Load error: {e}")
                         st.error("❌ Failed to load snapshot")
-            
+
             with col2:
                 if st.button("🗑️ Delete", key="del_btn"):
                     try:
@@ -130,7 +137,7 @@ def main():
 
     # Main Content Area
     st.header("🔌 Plugin Dashboard")
-    
+
     # Plugin Selection
     available_plugins = [p.get_name() for p in plugin_mgr.get_plugins()]
     selected_plugins = st.multiselect(
@@ -138,9 +145,9 @@ def main():
         available_plugins,
         key="selected_plugins",
         default=st.session_state.get("selected_plugins", []),
-        help="Select multiple plugins to activate them"
+        help="Select multiple plugins to activate them",
     )
-    
+
     # Plugin Execution
     if selected_plugins:
         st.subheader("🚀 Active Plugins")
@@ -160,21 +167,20 @@ def main():
 
     # Enhanced Debug Section
     with st.sidebar.expander("🔍 Debug Console"):
-        
-        st.subheader('📊 System Resources (Beta)')
-        real_time_monitor = st.checkbox("Enable real time monitor", key='real_time_monitor')
+
+        st.subheader("📊 System Resources (Beta)")
+        real_time_monitor = st.checkbox(
+            "Enable real time monitor", key="real_time_monitor"
+        )
         if real_time_monitor:
             st.fragment(run_every=1)(load_monitor)()
         else:
             load_monitor()
-        tab1, tab2 = st.tabs([
-            '📝 Session State', 
-            '📟 Terminal Output'
-        ])
-        
+        tab1, tab2 = st.tabs(["📝 Session State", "📟 Terminal Output"])
+
         with tab1:
             st.json(st.session_state)
-        
+
         with tab2:
             # Colored log display with auto-scroll (existing code)
             html(
@@ -198,20 +204,26 @@ def main():
                     container.scrollTop = container.scrollHeight;
                 </script>
                 """,
-                height=300
+                height=300,
             )
 
-        
         col1, col2 = st.columns(2)
         with col1:
             if st.button("🔄 Refresh All"):
                 st.rerun()
         with col2:
             if st.button("🗑️ Clear Logs"):
-                latest_log = max([os.path.join("logs", f) for f in os.listdir("logs") if f.endswith(".log")], 
-                               key=os.path.getmtime)
+                latest_log = max(
+                    [
+                        os.path.join("logs", f)
+                        for f in os.listdir("logs")
+                        if f.endswith(".log")
+                    ],
+                    key=os.path.getmtime,
+                )
                 open(latest_log, "w").close()
                 st.rerun()
+
 
 if __name__ == "__main__":
     main()
