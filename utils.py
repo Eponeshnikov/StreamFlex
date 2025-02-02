@@ -87,7 +87,7 @@ def logger_init(log_dir="logs"):
     logger.add(
         f"{log_dir}" + "/{time:YYYY-MM-DD}.log",  # Now in logs folder with date pattern
         rotation="10 MB",
-        retention="12 month",
+        retention="1 week",
         level="DEBUG",
         enqueue=True,
         compression="zip",  # Optional: compress rotated files

@@ -48,7 +48,7 @@ class DataManager:
         self.logger.info(f"Setting data: {key}={value}")
         st.session_state.shared_data[key] = value
 
-    def get_data(self, key):
+    def get_data(self, key, default=None):
         """
         Retrieve a value from the shared data dictionary using the provided key.
 
@@ -65,7 +65,7 @@ class DataManager:
             The value associated with the given key if it exists in the shared data dictionary,
             or None if the key is not found.
         """
-        value = st.session_state.shared_data.get(key)
+        value = st.session_state.shared_data.get(key, default)
         self.logger.debug(f"Retrieving data: {key}={value}")
         return value
 
