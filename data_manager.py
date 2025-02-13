@@ -45,7 +45,9 @@ class DataManager:
         --------
             None
         """
-        self.logger.info(f"Setting data: {key}={value}")
+        log_message = f"Setting data: {key}={value}"
+        log_message = log_message if len(log_message) < 1000 else log_message[:1000] + "..."
+        self.logger.debug(log_message)
         st.session_state.shared_data[key] = value
 
     def get_data(self, key, default=None):
@@ -66,7 +68,9 @@ class DataManager:
             or None if the key is not found.
         """
         value = st.session_state.shared_data.get(key, default)
-        self.logger.debug(f"Retrieving data: {key}={value}")
+        log_message = f"Retrieving data: {key}={value}"
+        log_message = log_message if len(log_message) < 1000 else log_message[:1000] + "..."
+        self.logger.debug(log_message)
         return value
 
     def clear_data(self, key):
