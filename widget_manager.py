@@ -1,5 +1,6 @@
-from loguru import logger
 import streamlit as st
+from loguru import logger
+
 
 class WidgetManager:
     def __init__(self):
@@ -15,7 +16,7 @@ class WidgetManager:
             None
         """
         self.logger = logger.bind(class_name=self.__class__.__name__)
-        if 'widget_states' not in st.session_state:
+        if "widget_states" not in st.session_state:
             st.session_state.widget_states = {}
             self.logger.debug("Initialized widget_states in session state")
         else:
@@ -53,7 +54,7 @@ class WidgetManager:
                 plugin=plugin_name,
                 key=widget_key,
                 value=repr(value),
-                prev=repr(previous_value)
+                prev=repr(previous_value),
             )
             return True
         except Exception as e:
@@ -61,7 +62,7 @@ class WidgetManager:
                 "Failed to save {plugin}.{key}: {error}",
                 plugin=plugin_name,
                 key=widget_key,
-                error=str(e)
+                error=str(e),
             )
             return False
 
@@ -90,14 +91,16 @@ class WidgetManager:
             and returns the provided default value.
         """
         try:
-            value = st.session_state.widget_states.get(plugin_name, {}).get(widget_key, default)
+            value = st.session_state.widget_states.get(plugin_name, {}).get(
+                widget_key, default
+            )
 
             self.logger.debug(
                 "Loading {plugin}.{key} = {value} (default: {default})",
                 plugin=plugin_name,
                 key=widget_key,
                 value=repr(value),
-                default=repr(default)
+                default=repr(default),
             )
 
             return value
@@ -106,7 +109,7 @@ class WidgetManager:
                 "Failed to load {plugin}.{key}: {error}",
                 plugin=plugin_name,
                 key=widget_key,
-                error=str(e)
+                error=str(e),
             )
             return default
 
@@ -134,7 +137,7 @@ class WidgetManager:
             self.logger.info(
                 "Exporting widget states: {count} plugins, {total} total widgets",
                 count=len(state),
-                total=sum(len(v) for v in state.values())
+                total=sum(len(v) for v in state.values()),
             )
             self.logger.trace("Exported state structure: {state}", state=state)
             return state
@@ -175,7 +178,7 @@ class WidgetManager:
             self.logger.success(
                 "Imported widget states: {plugins} plugins, {widgets} widgets",
                 plugins=len(state),
-                widgets=sum(len(v) for v in state.values())
+                widgets=sum(len(v) for v in state.values()),
             )
             self.logger.trace("Imported state structure: {state}", state=state)
             return True

@@ -1,13 +1,15 @@
 import os
+
 import psutil
 import streamlit as st
 from loguru import logger
+from streamlit.components.v1 import html
+
 from data_manager import DataManager
-from widget_manager import WidgetManager
 from plugin_manager import PluginManager
 from state_manager import StateManager
-from streamlit.components.v1 import html
 from utils import get_colored_logs, logger_init
+from widget_manager import WidgetManager
 
 # Logging configuration
 logger_init()
@@ -153,7 +155,7 @@ def main():
                 plugin = plugin_mgr.plugins.get(plugin_name)
                 if plugin:
                     try:
-                        st.subheader(f"_:blue[{plugin_name}]_", divider='blue')
+                        st.subheader(f"_:blue[{plugin_name}]_", divider="blue")
                         plugin.run(data_mgr, widget_mgr)
                         logger.info(f"Executed plugin: {plugin_name}")
                     except Exception as e:
@@ -164,7 +166,6 @@ def main():
 
     # Enhanced Debug Section
     with st.sidebar.expander("🔍 Debug Console"):
-
         st.subheader("📊 System Resources (Beta)")
         real_time_monitor = st.checkbox(
             "Enable real time monitor", key="real_time_monitor"

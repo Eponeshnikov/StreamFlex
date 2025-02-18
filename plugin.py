@@ -1,8 +1,9 @@
-import toml
 import os
 from pathlib import Path
-from loguru import logger
+
 import streamlit as st
+import toml
+from loguru import logger
 
 
 class Plugin:
@@ -65,7 +66,9 @@ class Plugin:
                 toml.dump({"name": self._name, "version": self._version}, f)
             self.logger.info(f"Created new config at {config_path}")
 
-        self.logger.success(f"Initialized plugin: {self.get_name()} v{self.get_version()}")
+        self.logger.success(
+            f"Initialized plugin: {self.get_name()} v{self.get_version()}"
+        )
 
     def get_name(self):
         return self._name

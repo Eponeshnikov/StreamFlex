@@ -1,5 +1,5 @@
-from loguru import logger
 import streamlit as st
+from loguru import logger
 
 
 class DataManager:
@@ -46,7 +46,9 @@ class DataManager:
             None
         """
         log_message = f"Setting data: {key}={value}"
-        log_message = log_message if len(log_message) < 1000 else log_message[:1000] + "..."
+        log_message = (
+            log_message if len(log_message) < 1000 else log_message[:1000] + "..."
+        )
         self.logger.debug(log_message)
         st.session_state.shared_data[key] = value
 
@@ -69,7 +71,9 @@ class DataManager:
         """
         value = st.session_state.shared_data.get(key, default)
         log_message = f"Retrieving data: {key}={value}"
-        log_message = log_message if len(log_message) < 1000 else log_message[:1000] + "..."
+        log_message = (
+            log_message if len(log_message) < 1000 else log_message[:1000] + "..."
+        )
         self.logger.debug(log_message)
         return value
 

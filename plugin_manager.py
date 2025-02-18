@@ -1,9 +1,11 @@
-from typing import List
 import importlib
 import subprocess
+from pathlib import Path
+from typing import List
+
 from git import Repo
 from loguru import logger
-from pathlib import Path
+
 from plugin import Plugin
 
 
@@ -27,7 +29,7 @@ class PluginManager:
         self.plugins = {}
 
         self.logger.info(
-            f"Initializing PluginManager", plugins_dir=str(self.plugins_dir)
+            "Initializing PluginManager", plugins_dir=str(self.plugins_dir)
         )
         self.logger.info(f"Pluginsdir: {self.plugins_dir}")
         self.plugins_dir.mkdir(parents=True, exist_ok=True)

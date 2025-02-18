@@ -1,8 +1,9 @@
-import os
-import sys
-from loguru import logger
-import pickle
 import hashlib
+import os
+import pickle
+import sys
+
+from loguru import logger
 
 
 def get_colored_logs(lines=100, log_dir="logs"):
