@@ -1,4 +1,4 @@
-import importlib
+import importlib.util
 import subprocess
 from pathlib import Path
 from typing import List
@@ -77,8 +77,8 @@ class PluginManager:
                 spec = importlib.util.spec_from_file_location(
                     plugin_name, str(module_path)
                 )
-                module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(module)
+                module = importlib.util.module_from_spec(spec) # type: ignore
+                spec.loader.exec_module(module) # type: ignore
                 self.logger.debug(
                     f"Module {module.__name__} loaded successfully",
                     module=module.__name__,
