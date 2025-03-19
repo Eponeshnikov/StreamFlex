@@ -1,0 +1,20 @@
+[project]
+name = "streamflex"
+version = "0.1.0"
+description = "A flexible application framework with plugin support, state snapshots, and dynamic widget management. Built with Streamlit for rapid UI development."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "gitpython>=3.1.44",
+    "importlib>=1.0.4",
+    "loguru>=0.7.3",
+    "psutil>=7.0.0",
+    "streamlit>=1.43.2",
+    "tomli>=2.2.1",
+]
+
+[dependency-groups]
+dev = [
+    "ipywidgets>=8.1.5",
+    "jupyter>=1.1.1",
+]

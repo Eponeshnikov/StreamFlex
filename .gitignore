@@ -162,3 +162,5 @@ tmp/
 snapshots/
 plugins/
 logs/
+# VSCode
+.vscode/
