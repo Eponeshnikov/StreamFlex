@@ -25,7 +25,9 @@ class StateManager:
             self.snapshots_dir,
         )
 
-    def save_snapshot(self, snapshot_name, data_mgr, widget_mgr, selected_plugins):
+    def save_snapshot(
+        self, snapshot_name, data_mgr, widget_mgr, selected_plugins
+    ):
         """
         Save current application state to a named snapshot.
 
@@ -60,7 +62,9 @@ class StateManager:
             )
 
             # Save to file
-            snapshot_path = os.path.join(self.snapshots_dir, f"{snapshot_name}.pkl")
+            snapshot_path = os.path.join(
+                self.snapshots_dir, f"{snapshot_name}.pkl"
+            )
             with open(snapshot_path, "wb") as f:
                 pickle.dump(snapshot_data, f)
 
@@ -95,7 +99,9 @@ class StateManager:
             list: A list of selected plugin names if the snapshot is loaded successfully, None otherwise.
         """
         try:
-            snapshot_path = os.path.join(self.snapshots_dir, f"{snapshot_name}.pkl")
+            snapshot_path = os.path.join(
+                self.snapshots_dir, f"{snapshot_name}.pkl"
+            )
             logger.debug("Attempting to load snapshot from: {}", snapshot_path)
 
             with open(snapshot_path, "rb") as f:
@@ -139,7 +145,9 @@ class StateManager:
                 If an error occurs during the listing process, an empty list is returned.
         """
         try:
-            files = [f for f in os.listdir(self.snapshots_dir) if f.endswith(".pkl")]
+            files = [
+                f for f in os.listdir(self.snapshots_dir) if f.endswith(".pkl")
+            ]
             snapshots = [f[:-4] for f in files]  # Remove .pkl extension
             logger.info(
                 "Found {} snapshots in directory '{}'",
@@ -174,12 +182,16 @@ class StateManager:
             bool: True if the snapshot is deleted successfully, False otherwise.
         """
         try:
-            snapshot_path = os.path.join(self.snapshots_dir, f"{snapshot_name}.pkl")
+            snapshot_path = os.path.join(
+                self.snapshots_dir, f"{snapshot_name}.pkl"
+            )
 
             if os.path.exists(snapshot_path):
                 os.remove(snapshot_path)
                 logger.success(
-                    "Deleted snapshot '{}' from: {}", snapshot_name, snapshot_path
+                    "Deleted snapshot '{}' from: {}",
+                    snapshot_name,
+                    snapshot_path,
                 )
                 return True
 

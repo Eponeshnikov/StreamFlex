@@ -124,7 +124,11 @@ class Plugin:
 
         # Prepare widget parameters
         if value_param is not None:
-            widget_params = {**kwargs, value_param: saved_value, "key": full_key}
+            widget_params = {
+                **kwargs,
+                value_param: saved_value,
+                "key": full_key,
+            }
         else:
             widget_params = {**kwargs, "key": full_key}
         # Create widget

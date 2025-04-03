@@ -87,9 +87,14 @@ def main():
             if st.button("💾 Save", key="save_btn"):
                 if snapshot_name:
                     try:
-                        selected_plugins = st.session_state.get("selected_plugins", [])
+                        selected_plugins = st.session_state.get(
+                            "selected_plugins", []
+                        )
                         if state_mgr.save_snapshot(
-                            snapshot_name, data_mgr, widget_mgr, selected_plugins
+                            snapshot_name,
+                            data_mgr,
+                            widget_mgr,
+                            selected_plugins,
                         ):
                             logger.info(f"Saved snapshot: {snapshot_name}")
                             st.success(f"✅ Saved: {snapshot_name}")
@@ -116,8 +121,12 @@ def main():
                             selected_snapshot, data_mgr, widget_mgr
                         )
                         if selected_plugins is not None:
-                            st.session_state.selected_plugins = selected_plugins
-                            logger.info(f"Loaded snapshot: {selected_snapshot}")
+                            st.session_state.selected_plugins = (
+                                selected_plugins
+                            )
+                            logger.info(
+                                f"Loaded snapshot: {selected_snapshot}"
+                            )
                             st.success(f"✅ Loaded: {selected_snapshot}")
                             st.rerun()
                     except Exception as e:
@@ -128,7 +137,9 @@ def main():
                 if st.button("🗑️ Delete", key="del_btn"):
                     try:
                         if state_mgr.delete_snapshot(selected_snapshot):
-                            logger.info(f"Deleted snapshot: {selected_snapshot}")
+                            logger.info(
+                                f"Deleted snapshot: {selected_snapshot}"
+                            )
                             st.success(f"✅ Deleted: {selected_snapshot}")
                             st.rerun()
                         else:
@@ -162,7 +173,9 @@ def main():
                         logger.error(f"Plugin {plugin_name} failed: {e}")
                         st.error(f"❌ Error in {plugin_name}: {str(e)}")
     else:
-        st.info("ℹ️ No plugins selected. Choose plugins from the dropdown above.")
+        st.info(
+            "ℹ️ No plugins selected. Choose plugins from the dropdown above."
+        )
 
     # Enhanced Debug Section
     with st.sidebar.expander("🔍 Debug Console"):

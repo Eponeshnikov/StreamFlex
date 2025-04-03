@@ -33,7 +33,9 @@ def get_colored_logs(lines=100, log_dir="logs"):
             return "<span style='color: red'>Logs directory not found</span>"
 
         log_files = [
-            os.path.join(log_dir, f) for f in os.listdir(log_dir) if f.endswith(".log")
+            os.path.join(log_dir, f)
+            for f in os.listdir(log_dir)
+            if f.endswith(".log")
         ]
         if not log_files:
             return "<span style='color: yellow'>No log files available</span>"
@@ -46,17 +48,27 @@ def get_colored_logs(lines=100, log_dir="logs"):
             for line in content:
                 # Add color based on log level
                 if "ERROR" in line:
-                    colored_lines.append(f"<span style='color: #ff4b4b'>{line}</span>")
+                    colored_lines.append(
+                        f"<span style='color: #ff4b4b'>{line}</span>"
+                    )
                 elif "WARNING" in line:
-                    colored_lines.append(f"<span style='color: #faca2b'>{line}</span>")
+                    colored_lines.append(
+                        f"<span style='color: #faca2b'>{line}</span>"
+                    )
                 elif "INFO" in line:
                     # Changed INFO to white
-                    colored_lines.append(f"<span style='color: #FFFFFF'>{line}</span>")
+                    colored_lines.append(
+                        f"<span style='color: #FFFFFF'>{line}</span>"
+                    )
                 elif "DEBUG" in line:
                     # Changed DEBUG to light blue
-                    colored_lines.append(f"<span style='color: #4DCFFF'>{line}</span>")
+                    colored_lines.append(
+                        f"<span style='color: #4DCFFF'>{line}</span>"
+                    )
                 else:
-                    colored_lines.append(f"<span style='color: white'>{line}</span>")
+                    colored_lines.append(
+                        f"<span style='color: white'>{line}</span>"
+                    )
             return "".join(colored_lines)
     except Exception as e:
         return f"<span style='color: red'>Error reading logs: {str(e)}</span>"
@@ -86,7 +98,8 @@ def logger_init(log_dir="logs"):
 
     # Configure file logging
     logger.add(
-        f"{log_dir}" + "/{time:YYYY-MM-DD}.log",  # Now in logs folder with date pattern
+        f"{log_dir}"
+        + "/{time:YYYY-MM-DD}.log",  # Now in logs folder with date pattern
         rotation="10 MB",
         retention="1 week",
         level="DEBUG",

@@ -62,7 +62,9 @@ class PluginManager:
             self.logger.debug("Processing directory entry", entry=plugin_name)
 
             if not entry.is_dir():
-                self.logger.warning("Skipping non-directory plugin", entry=plugin_name)
+                self.logger.warning(
+                    "Skipping non-directory plugin", entry=plugin_name
+                )
                 continue
 
             module_path = plugin_path / "plugin.py"
@@ -73,12 +75,14 @@ class PluginManager:
                 continue
 
             try:
-                self.logger.info(f"Loading plugin {plugin_name}", plugin=plugin_name)
+                self.logger.info(
+                    f"Loading plugin {plugin_name}", plugin=plugin_name
+                )
                 spec = importlib.util.spec_from_file_location(
                     plugin_name, str(module_path)
                 )
-                module = importlib.util.module_from_spec(spec) # type: ignore
-                spec.loader.exec_module(module) # type: ignore
+                module = importlib.util.module_from_spec(spec)  # type: ignore
+                spec.loader.exec_module(module)  # type: ignore
                 self.logger.debug(
                     f"Module {module.__name__} loaded successfully",
                     module=module.__name__,
@@ -119,7 +123,9 @@ class PluginManager:
                     "Plugin loading failed", plugin=plugin_name, error=str(e)
                 )
 
-        self.logger.info("Completed plugin loading", total_plugins=plugin_count)
+        self.logger.info(
+            "Completed plugin loading", total_plugins=plugin_count
+        )
 
     def install_plugin(self, repo_url: str) -> bool:
         """
@@ -155,11 +161,15 @@ class PluginManager:
         try:
             self.logger.debug("Cloning repository", repo=repo_name)
             Repo.clone_from(repo_url, str(plugin_dir))
-            self.logger.success("Repository cloned successfully", path=str(plugin_dir))
+            self.logger.success(
+                "Repository cloned successfully", path=str(plugin_dir)
+            )
 
             req_file = plugin_dir / "requirements.txt"
             if req_file.exists():
-                self.logger.info("Installing dependencies", requirements=str(req_file))
+                self.logger.info(
+                    "Installing dependencies", requirements=str(req_file)
+                )
                 result = subprocess.run(
                     ["pip", "install", "-r", str(req_file)],
                     capture_output=True,
@@ -168,7 +178,8 @@ class PluginManager:
 
                 if result.returncode == 0:
                     self.logger.success(
-                        "Dependencies installed successfully", output=result.stdout
+                        "Dependencies installed successfully",
+                        output=result.stdout,
                     )
                 else:
                     self.logger.error(
@@ -210,5 +221,7 @@ class PluginManager:
         --------
             List[Plugin]: A list of Plugin instances. Each Plugin instance represents a loaded and registered plugin.
         """
-        self.logger.debug("Retrieving registered plugins", count=len(self.plugins))
+        self.logger.debug(
+            "Retrieving registered plugins", count=len(self.plugins)
+        )
         return list(self.plugins.values())
