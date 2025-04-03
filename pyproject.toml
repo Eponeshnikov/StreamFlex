@@ -14,8 +14,29 @@ dependencies = [
 ]
 
 [dependency-groups]
+cir-generator = [
+    "plotly>=6.0.1",
+    "sionna>=1.0.2",
+    "tensorflow[and-cuda]>=2.18.1",
+]
+codegenerator = [
+    "galois>=0.4.4",
+    "pandas>=2.2.3",
+    "sdr>=0.0.27",
+]
 dev = [
     "ipywidgets>=8.1.5",
     "jupyter>=1.1.1",
     "scikit-learn>=1.6.1",
+]
+iqgenerator = [
+    "galois>=0.4.4",
+    "plotly>=6.0.1",
+    "sionna>=1.0.2",
+    "tensorflow[and-cuda]>=2.18.1",
+]
+pulse-shaping = [
+    "plotly>=6.0.1",
+    "sionna>=1.0.2",
+    "tensorflow[and-cuda]>=2.18.1",
 ]

@@ -53,3 +53,25 @@ A flexible application framework with plugin support, state snapshots, and dynam
    - View real-time session state
    - Monitor colored log output
    - Refresh app state or clear logs
+
+## Execution & Deployment
+
+### Installing Dependencies
+
+Firstly, you need install [`uv`](https://docs.astral.sh/uv/getting-started/installation/).
+
+To install dependencies for a project, use the `uv sync` command:
+
+```bash
+uv sync
+```
+
+This command installs all dependencies listed in `pyprojects.toml`.
+
+### Launching the Application
+
+Once the dependencies are installed, launch the application using Streamlit with the following command:
+
+```bash
+streamlit run app.py
+```
