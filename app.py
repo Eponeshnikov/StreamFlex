@@ -190,7 +190,7 @@ def main():
         tab1, tab2 = st.tabs(["📝 Session State", "📟 Terminal Output"])
 
         with tab1:
-            st.json(st.session_state)
+            st.json(st.session_state, expanded=3)
 
         with tab2:
             # Colored log display with auto-scroll (existing code)
