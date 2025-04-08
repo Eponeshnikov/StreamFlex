@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+from typing import Literal
 import streamlit as st
 import toml
 from loguru import logger
@@ -90,6 +91,7 @@ class Plugin:
         kwargs={},
         value_serializer=lambda x: x,
         value_deserializer=lambda x: x,
+        rerun_scope: Literal["app", "fragment"] = "app",
     ):
         """
         Universal widget creator with state persistence.
@@ -140,6 +142,6 @@ class Plugin:
             widget_manager.save_widget_state(
                 self.get_name(), widget_name, serialized_value
             )
-            st.rerun()
+            st.rerun(scope=rerun_scope)
 
         return widget_value
