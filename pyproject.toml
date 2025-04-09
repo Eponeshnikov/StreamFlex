@@ -9,7 +9,7 @@ dependencies = [
     "importlib>=1.0.4",
     "loguru>=0.7.3",
     "psutil>=7.0.0",
-    "streamlit>=1.43.2",
+    "streamlit>=1.44",
     "tomli>=2.2.1",
 ]
 
@@ -36,6 +36,11 @@ iqgenerator = [
     "tensorflow[and-cuda]>=2.18.1",
 ]
 pulse-shaping = [
+    "plotly>=6.0.1",
+    "sionna>=1.0.2",
+    "tensorflow[and-cuda]>=2.18.1",
+]
+signal-channelizer = [
     "plotly>=6.0.1",
     "sionna>=1.0.2",
     "tensorflow[and-cuda]>=2.18.1",
