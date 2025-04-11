@@ -164,3 +164,4 @@ plugins/
 logs/
 # VSCode
 .vscode/
+output_data/
