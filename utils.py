@@ -138,7 +138,7 @@ def generate_cache_filename(func, *args, **kwargs):
     combined_data = (func.__name__, args, kwargs)
     serialized_data = pickle.dumps(combined_data)
     hash_object = hashlib.sha256(serialized_data)
-    filename = f"{func.__name__}_" + hash_object.hexdigest() + ".pickle"
+    filename = f"{func.__name__}^" + hash_object.hexdigest() + ".pickle"
     return os.path.join(CACHE_FOLDER, filename)
 
 
