@@ -11,20 +11,21 @@ from state_manager import StateManager
 from utils import get_colored_logs, logger_init
 from widget_manager import WidgetManager
 
+
 def get_dir_size(directory):
     """
     Calculate total size of all files in a directory (recursively) in bytes
-    
+
     Args:
         directory (str): Path to directory
-        
+
     Returns:
         int: Total size in bytes (0 if directory doesn't exist)
     """
     total_size = 0
     if not os.path.exists(directory):
         return 0
-        
+
     for dirpath, _, filenames in os.walk(directory):
         for filename in filenames:
             filepath = os.path.join(dirpath, filename)
@@ -38,30 +39,30 @@ def get_dir_size(directory):
 def format_size(size_bytes):
     """
     Convert size in bytes to human-readable format
-    
+
     Args:
         size_bytes (int): Size in bytes
-        
+
     Returns:
         str: Formatted size string (e.g., "1.23 MB")
     """
     if size_bytes == 0:
         return "0 bytes"
-        
+
     units = ["bytes", "KB", "MB", "GB", "TB"]
     unit_index = 0
-    
-    while size_bytes >= 1024 and unit_index < len(units)-1:
+
+    while size_bytes >= 1024 and unit_index < len(units) - 1:
         size_bytes /= 1024
         unit_index += 1
-        
+
     return f"{size_bytes:.2f} {units[unit_index]}"
 
 
 def get_cache_sizes():
     """
     Get sizes of all cache directories
-    
+
     Returns:
         dict: Dictionary with sizes of each directory in bytes
               Format: {
@@ -71,20 +72,21 @@ def get_cache_sizes():
               }
     """
     sizes = {
-        'tmp': {
-            'size_bytes': get_dir_size('.tmp'),
-            'formatted': format_size(get_dir_size('.tmp'))
+        "tmp": {
+            "size_bytes": get_dir_size(".tmp"),
+            "formatted": format_size(get_dir_size(".tmp")),
         },
-        'cache': {
-            'size_bytes': get_dir_size('.cache'),
-            'formatted': format_size(get_dir_size('.cache'))
+        "cache": {
+            "size_bytes": get_dir_size(".cache"),
+            "formatted": format_size(get_dir_size(".cache")),
         },
-        'output': {
-            'size_bytes': get_dir_size('output_data'),
-            'formatted': format_size(get_dir_size('output_data'))
-        }
+        "output": {
+            "size_bytes": get_dir_size("output_data"),
+            "formatted": format_size(get_dir_size("output_data")),
+        },
     }
     return sizes
+
 
 def clear_cache_dirs(
     clear_cache=False, clear_output=False, cache_categories=None
@@ -171,28 +173,34 @@ def clear_cache_dirs(
         return False, f"Failed to clear: {str(e)}"
 
 
+@st.fragment
 def cache_management_ui():
     """Streamlit UI for cache management operations"""
-    with st.expander("🧹 Cache Management"):
-        col1, col2 = st.columns([9, 1], vertical_alignment='top')
-        col1.subheader("Clear Cache Directories")
-        col2.button("", key="refresh_cache_btn", icon="🔄", type='tertiary')
+    with st.expander(" Clear Cache Directories", icon="🧹"):
+        # col1, col2 = st.columns([9, 1], vertical_alignment='top')
+        # col1.subheader("Clear Cache Directories")
+        st.button(
+            "Refresh",
+            key="refresh_cache_btn",
+            icon=":material/restart_alt:",
+            type="primary",
+        )
         sizes = get_cache_sizes()
-        col1, col2, col3 = st.tabs(['.tmp', '.cache', 'Output'])
+        col1, col2, col3 = st.tabs([".tmp", ".cache", "Output"])
         with col1:
-            st.metric(".tmp Size", sizes['tmp']['formatted'])
+            st.metric(".tmp Size", sizes["tmp"]["formatted"])
         with col2:
-            st.metric(".cache Size", sizes['cache']['formatted'])
+            st.metric(".cache Size", sizes["cache"]["formatted"])
         with col3:
-            st.metric("Output Size", sizes['output']['formatted'])
+            st.metric("Output Size", sizes["output"]["formatted"])
         # Cache files section
         clear_select = st.pills(
             "Select folder for clearing",
-            [".cache", "output_data"],
+            [".cache + .tmp", "output_data"],
             selection_mode="multi",
-            key='clear_trash_select'
+            key="clear_trash_select",
         )
-        clear_cache_box = ".cache" in clear_select
+        clear_cache_box = ".cache + .tmp" in clear_select
         # cache_categories = set()
         # cache_dir = ".cache"
         # if os.path.exists(cache_dir):
@@ -210,7 +218,11 @@ def cache_management_ui():
 
         clear_output = "output_data" in clear_select
 
-        if st.button("🗑️ Execute Clearing", key="execute_clearing", disabled=len(clear_select)==0):
+        if st.button(
+            "🗑️ Execute Clearing",
+            key="execute_clearing",
+            disabled=len(clear_select) == 0,
+        ):
             success, msg = clear_cache_dirs(
                 clear_cache=clear_cache_box,
                 clear_output=clear_output,
@@ -258,6 +270,25 @@ def load_monitor():
         st.error("High CPU usage detected!")
     if mem_percent > 90:
         st.error("High Memory usage detected!")
+
+
+def rerun_ui():
+    rerun_default_scope = st.segmented_control(
+        "Rerun Scope",
+        ["app", "fragment"],
+        default="fragment",
+        help="Rerun scope for widgets",
+    )
+    return rerun_default_scope
+
+
+@st.fragment
+def rerun_bttn():
+    rerun_all = st.button(
+        "Rerun all", type="primary", icon=":material/autorenew:"
+    )
+    if rerun_all:
+        st.rerun(scope="app")
 
 
 def main():
@@ -358,7 +389,11 @@ def main():
                     except Exception as e:
                         logger.error(f"Delete error: {e}")
                         st.error("❌ Failed to delete snapshot")
-        st.fragment(cache_management_ui)()
+        st.divider()
+        cache_management_ui()
+        with st.expander("Rerun Control", expanded=False, icon=":material/published_with_changes:"):
+            rerun_scope = rerun_ui()
+            rerun_bttn()
 
     # Plugin Selection
     available_plugins = [p.get_name() for p in plugin_mgr.get_plugins()]
@@ -379,6 +414,8 @@ def main():
                 if plugin:
                     try:
                         st.subheader(f"_:blue[{plugin_name}]_", divider="blue")
+                        if rerun_scope is not None:
+                            plugin.global_rerun_scope = rerun_scope
                         plugin.run(data_mgr, widget_mgr)
                         logger.info(f"Executed plugin: {plugin_name}")
                     except Exception as e:

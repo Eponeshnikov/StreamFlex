@@ -10,6 +10,7 @@ from loguru import logger
 class Plugin:
     def __init__(self):
         self.logger = logger.bind(class_name=self.__class__.__name__)
+        self.global_rerun_scope: Literal["fragment", "app"] = "fragment"
         try:
             self.file = self.file if self.file is not None else __file__
             self.logger.debug(
@@ -91,7 +92,7 @@ class Plugin:
         kwargs={},
         value_serializer=lambda x: x,
         value_deserializer=lambda x: x,
-        rerun_scope: Literal["app", "fragment"] = "app",
+        rerun_scope: Literal["app", "fragment"] | None = None,
     ):
         """
         Universal widget creator with state persistence.
@@ -116,6 +117,9 @@ class Plugin:
         -------
         The created and potentially updated widget value.
         """
+        local_rerun_scope: Literal["app", "fragment"] = (
+            rerun_scope if rerun_scope is not None else self.global_rerun_scope
+        )
         full_key = f"{self.get_name()}_{widget_name}"
 
         # Load and deserialize saved state
@@ -142,6 +146,6 @@ class Plugin:
             widget_manager.save_widget_state(
                 self.get_name(), widget_name, serialized_value
             )
-            st.rerun(scope=rerun_scope)
+            st.rerun(scope=local_rerun_scope)
 
         return widget_value
