@@ -11,6 +11,80 @@ from state_manager import StateManager
 from utils import get_colored_logs, logger_init
 from widget_manager import WidgetManager
 
+def get_dir_size(directory):
+    """
+    Calculate total size of all files in a directory (recursively) in bytes
+    
+    Args:
+        directory (str): Path to directory
+        
+    Returns:
+        int: Total size in bytes (0 if directory doesn't exist)
+    """
+    total_size = 0
+    if not os.path.exists(directory):
+        return 0
+        
+    for dirpath, _, filenames in os.walk(directory):
+        for filename in filenames:
+            filepath = os.path.join(dirpath, filename)
+            try:
+                total_size += os.path.getsize(filepath)
+            except OSError:
+                continue
+    return total_size
+
+
+def format_size(size_bytes):
+    """
+    Convert size in bytes to human-readable format
+    
+    Args:
+        size_bytes (int): Size in bytes
+        
+    Returns:
+        str: Formatted size string (e.g., "1.23 MB")
+    """
+    if size_bytes == 0:
+        return "0 bytes"
+        
+    units = ["bytes", "KB", "MB", "GB", "TB"]
+    unit_index = 0
+    
+    while size_bytes >= 1024 and unit_index < len(units)-1:
+        size_bytes /= 1024
+        unit_index += 1
+        
+    return f"{size_bytes:.2f} {units[unit_index]}"
+
+
+def get_cache_sizes():
+    """
+    Get sizes of all cache directories
+    
+    Returns:
+        dict: Dictionary with sizes of each directory in bytes
+              Format: {
+                  'tmp': {'size_bytes': int, 'formatted': str},
+                  'cache': {'size_bytes': int, 'formatted': str},
+                  'output': {'size_bytes': int, 'formatted': str}
+              }
+    """
+    sizes = {
+        'tmp': {
+            'size_bytes': get_dir_size('.tmp'),
+            'formatted': format_size(get_dir_size('.tmp'))
+        },
+        'cache': {
+            'size_bytes': get_dir_size('.cache'),
+            'formatted': format_size(get_dir_size('.cache'))
+        },
+        'output': {
+            'size_bytes': get_dir_size('output_data'),
+            'formatted': format_size(get_dir_size('output_data'))
+        }
+    }
+    return sizes
 
 def clear_cache_dirs(
     clear_cache=False, clear_output=False, cache_categories=None
@@ -100,8 +174,17 @@ def clear_cache_dirs(
 def cache_management_ui():
     """Streamlit UI for cache management operations"""
     with st.expander("🧹 Cache Management"):
-        st.subheader("Clear Cache Directories")
-
+        col1, col2 = st.columns([9, 1], vertical_alignment='top')
+        col1.subheader("Clear Cache Directories")
+        col2.button("", key="refresh_cache_btn", icon="🔄", type='tertiary')
+        sizes = get_cache_sizes()
+        col1, col2, col3 = st.tabs(['.tmp', '.cache', 'Output'])
+        with col1:
+            st.metric(".tmp Size", sizes['tmp']['formatted'])
+        with col2:
+            st.metric(".cache Size", sizes['cache']['formatted'])
+        with col3:
+            st.metric("Output Size", sizes['output']['formatted'])
         # Cache files section
         clear_select = st.pills(
             "Select folder for clearing",
@@ -135,7 +218,6 @@ def cache_management_ui():
             )
             if success:
                 st.success(msg)
-                st.rerun()  # Refresh to show changes
             else:
                 st.error(msg)
 
