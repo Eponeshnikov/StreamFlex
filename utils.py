@@ -2,8 +2,153 @@ import hashlib
 import os
 import pickle
 import sys
-
+import numbers
+import ast
 from loguru import logger
+
+
+def generate_unique_filename(plugin_name, data, *args, **kwargs):
+    """
+    Generate a unique filename by combining the plugin_name with a hash of the serialized data.
+
+    Parameters:
+        plugin_name (str): The name of the plugin.
+        data: The data to be serialized and hashed.
+
+    Returns:
+        str: A unique filename in the format "plugin_name_hash.pickle".
+    """
+    combined_data = (plugin_name, data, args, kwargs)
+    serialized_data = pickle.dumps(combined_data)
+    hash_object = hashlib.sha256(serialized_data)
+    filename = f"{plugin_name}^" + hash_object.hexdigest()
+    return filename
+
+
+def save_to_pickle(data, filename, folder="cache"):
+    """
+    Save data to a pickle file and return the file path.
+
+    Parameters:
+        data: The data to be saved.
+        filename (str): The name of the pickle file.
+        folder (str): The folder where the pickle file will be saved.
+
+    Returns:
+        str: The full path to the saved pickle file.
+    """
+    # Ensure the folder exists
+    os.makedirs(folder, exist_ok=True)
+
+    # Create the full file path
+    file_path = os.path.join(folder, filename)  # type: ignore
+
+    # Save the data to the pickle file
+    with open(file_path, "wb") as f:
+        pickle.dump(data, f)
+
+    return file_path
+
+
+# Helper function to safely parse values, especially for None and numbers
+def safe_literal_eval(value_str, expected_type=None, allow_none=False):
+    """
+    Safely evaluate a string literal, handling None and basic types.
+
+    Parameters:
+        value_str (str): The string to be evaluated. It can represent a literal value like a number, string, or None.
+        expected_type (str, optional): The expected type of the evaluated value.
+            Can be "int", "float", or "str". If provided, the function will enforce type checking.
+        allow_none (bool, optional): Whether to allow the string "None" to be evaluated as None.
+            If False, a ValueError will be raised if "None" is encountered.
+
+    Returns:
+        The evaluated value, which can be an int, float, str, list, or None, depending on the input.
+
+    Raises:
+        ValueError: If the input string cannot be evaluated, or if the evaluated value does not match the expected type,
+                   or if "None" is encountered but `allow_none` is False.
+    """
+    # self.logger.debug(f"Attempting safe_literal_eval on '{value_str}' (expected: {expected_type}, allow_none: {allow_none})") # Cannot log here as it's a global function
+    try:
+        # Handle direct None string
+        if isinstance(value_str, str) and value_str.strip().lower() == "none":
+            if allow_none:
+                # self.logger.debug("Evaluated 'None' string as None.")
+                return None
+            else:
+                # self.logger.warning(f"Disallowed 'None' string encountered for value '{value_str}'.")
+                raise ValueError("None is not allowed for this parameter.")
+
+        # Evaluate other literals using ast.literal_eval, which safely evaluates strings to Python literals
+        val = ast.literal_eval(value_str)
+        # self.logger.debug(f"ast.literal_eval result: {val} (type: {type(val)})")
+
+        # Type checking for single values (won't apply directly to list strings)
+        if expected_type == "int" and not isinstance(val, int):
+            # Special case: Check if it's a list where evaluation happened
+            if not isinstance(val, list):
+                # self.logger.warning(f"Type mismatch: Expected int, got {type(val)} for '{value_str}'.")
+                raise ValueError(f"Expected an integer, got {type(val)}")
+        if expected_type == "float" and not isinstance(
+            val, numbers.Number
+        ):  # Allow int to be treated as float
+            # Special case: Check if it's a list where evaluation happened
+            if not isinstance(val, list):
+                # self.logger.warning(f"Type mismatch: Expected float, got {type(val)} for '{value_str}'.")
+                raise ValueError(f"Expected a float, got {type(val)}")
+        if expected_type == "str" and not isinstance(val, str):
+            # Special case: Check if it's a list where evaluation happened
+            if not isinstance(val, list):
+                # self.logger.warning(f"Type mismatch: Expected str, got {type(val)} for '{value_str}'.")
+                raise ValueError(f"Expected a string, got {type(val)}")
+
+        # Check for None if not allowed (after evaluation)
+        if val is None and not allow_none:
+            # self.logger.warning(f"Disallowed None value encountered after evaluation for '{value_str}'.")
+            raise ValueError("None is not allowed for this parameter.")
+
+        # self.logger.debug(f"Successfully evaluated '{value_str}' to: {val}")
+        return val
+    except (ValueError, SyntaxError, TypeError) as e:
+        # self.logger.error(f"Evaluation failed for '{value_str}': {e}")
+        raise ValueError(f"Invalid input format '{value_str}': {e}")
+
+
+def calculate_eta(total_work, completed_work, time_elapsed):
+    """
+    Calculate the estimated time remaining (eta) in seconds.
+
+    Parameters:
+        total_work (float or int): Total amount of work to be done (e.g., bytes, tasks).
+        completed_work (float or int): Amount of work already completed.
+        time_elapsed (float): Time elapsed so far in seconds.
+
+    Returns:
+        float: Estimated time remaining in seconds, or 0.0 if work is complete.
+        None: If eta cannot be estimated due to insufficient data.
+
+    Raises:
+        ValueError: If total_work is not positive, or if completed_work or time_elapsed is negative.
+    """
+    # Input validation
+    if total_work <= 0:
+        raise ValueError("total_work must be positive")
+    if completed_work < 0:
+        raise ValueError("completed_work cannot be negative")
+    if time_elapsed < 0:
+        raise ValueError("time_elapsed cannot be negative")
+
+    # If work is complete or overdone, no time remains
+    if completed_work >= total_work:
+        return 0.0
+
+    # If no work is done or no time has elapsed, eta cannot be estimated
+    if completed_work == 0 or time_elapsed == 0:
+        return "Estimated..."
+
+    # Calculate eta: time_elapsed * (remaining_work / completed_work)
+    return time_elapsed * (total_work - completed_work) / completed_work
 
 
 def get_colored_logs(lines=100, log_dir="logs"):
