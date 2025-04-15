@@ -233,6 +233,10 @@ def cache_management_ui():
             else:
                 st.error(msg)
 
+@st.fragment
+def session_state_manager():
+    st.json(st.session_state, expanded=3)
+    st.button("Refresh")
 
 # Logging configuration
 logger_init()
@@ -439,7 +443,7 @@ def main():
         tab1, tab2 = st.tabs(["📝 Session State", "📟 Terminal Output"])
 
         with tab1:
-            st.json(st.session_state, expanded=3)
+            session_state_manager()
 
         with tab2:
             # Colored log display with auto-scroll (existing code)
