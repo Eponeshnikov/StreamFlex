@@ -138,7 +138,11 @@ class Plugin:
         else:
             widget_params = {**kwargs, "key": full_key}
         # Create widget
-        widget_value = widget_type(*args, **widget_params)
+        try:
+            widget_value = widget_type(*args, **widget_params)
+        except:  # noqa: E722
+            widget_params = {**kwargs, "key": full_key}
+            widget_value = widget_type(*args, **widget_params)
 
         # Serialize and save if value changes
         serialized_value = value_serializer(widget_value)
