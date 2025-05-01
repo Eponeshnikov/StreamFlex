@@ -101,7 +101,7 @@ class WidgetManager:
             value_state = st.session_state.widget_states.get(
                 plugin_name, {}
             ).get(widget_key, default)
-            is_new_object = widget_key not in st.session_state.widget_states.get(
+            is_new_object = widget_key not in st.session_state.current_value.get(
                 plugin_name, {}
             )
             if is_new_object:
