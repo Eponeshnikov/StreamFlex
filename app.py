@@ -233,10 +233,12 @@ def cache_management_ui():
             else:
                 st.error(msg)
 
+
 @st.fragment
 def session_state_manager():
     st.json(st.session_state, expanded=3)
     st.button("Refresh")
+
 
 # Logging configuration
 logger_init()
@@ -295,7 +297,27 @@ def rerun_bttn():
         st.rerun(scope="app")
 
 
+def global_trigger_onclick():
+    st.session_state["global_trigger"] = True
+
+
+def global_trigger():
+    """Styled global trigger with visual feedback and enhanced UI"""
+    st.markdown("### ⚡ Global Control")
+
+    if st.button(
+        "Execute Global Trigger",
+        type="primary",
+        use_container_width=True,
+        icon="⚡",
+        help="Trigger action across all plugins simultaneously",
+        on_click=global_trigger_onclick,
+    ):
+        st.toast("Trigger activated system-wide!", icon=":material/flash_on:")
+
+
 def main():
+    # st.session_state["global_trigger"] = False
     st.set_page_config(page_title="Dynamic Plugin System", layout="wide")
 
     st.title("🎛️ StreamFlex")
@@ -394,8 +416,14 @@ def main():
                         logger.error(f"Delete error: {e}")
                         st.error("❌ Failed to delete snapshot")
         st.divider()
+        global_trigger()
+        st.divider()
         cache_management_ui()
-        with st.expander("Rerun Control", expanded=False, icon=":material/published_with_changes:"):
+        with st.expander(
+            "Rerun Control",
+            expanded=False,
+            icon=":material/published_with_changes:",
+        ):
             rerun_scope = rerun_ui()
             rerun_bttn()
 
@@ -420,7 +448,7 @@ def main():
                         st.subheader(f"_:blue[{plugin_name}]_", divider="blue")
                         if rerun_scope is not None:
                             plugin.global_rerun_scope = rerun_scope
-                        plugin.run(data_mgr, widget_mgr)
+                        plugin.run_notification(data_mgr, widget_mgr)
                         logger.info(f"Executed plugin: {plugin_name}")
                     except Exception as e:
                         logger.error(f"Plugin {plugin_name} failed: {e}")
@@ -429,7 +457,7 @@ def main():
         st.info(
             "ℹ️ No plugins selected. Choose plugins from the dropdown above."
         )
-
+    st.session_state["global_trigger"] = False
     # Enhanced Debug Section
     with st.sidebar.expander("🔍 Debug Console"):
         st.subheader("📊 System Resources (Beta)")

@@ -1,8 +1,10 @@
 import os
 from pathlib import Path
 
+import time
 from typing import Literal
 import streamlit as st
+from streamlit.errors import StreamlitAPIException
 import toml
 from loguru import logger
 
@@ -11,6 +13,8 @@ class Plugin:
     def __init__(self):
         self.logger = logger.bind(class_name=self.__class__.__name__)
         self.global_rerun_scope: Literal["fragment", "app"] = "fragment"
+        self.rerun_on_err = True
+        self.max_retries = 3
         try:
             self.file = self.file if self.file is not None else __file__
             self.logger.debug(
@@ -77,6 +81,47 @@ class Plugin:
 
     def get_version(self):
         return self._version
+
+    @st.fragment
+    def run_notification(self, data_manager, widget_manager):
+        start_time = time.time()
+        retry_key = f"{self.get_name()}_retry_count"
+
+        # Initialize retry counter in session state if not present
+        if retry_key not in st.session_state:
+            st.session_state[retry_key] = 0
+
+        try:
+            self.run(data_manager, widget_manager)
+            # st.toast(f"✅ Plugin `{self.get_name()}` executed successfully.")
+            # Reset retry count on success
+            st.session_state[retry_key] = 0
+
+        except StreamlitAPIException as e:
+            if self.rerun_on_err:
+                current_retries = st.session_state[retry_key]
+                if current_retries < self.max_retries:
+                    st.session_state[retry_key] += 1
+                    st.toast(
+                        f"❌ Error in {self.get_name()} plugin (retry {current_retries + 1}/{self.max_retries}), rerunning..."
+                    )
+                    st.rerun()
+                else:
+                    st.toast(
+                        f"❌ {self.get_name()} failed after {self.max_retries} reruns"
+                    )
+                    self.logger.exception(
+                        f"{self.get_name()} plugin failed after {self.max_retries} reruns: {e}"
+                    )
+                    st.session_state[retry_key] = 0  # Reset for future use
+            else:
+                st.toast(f"❌ Error in {self.get_name()} plugin")
+                self.logger.exception(f"{self.get_name()} plugin error: {e}")
+
+        finally:
+            st.toast(
+                f"🚀 Plugin `{self.get_name()}` executed in {time.time() - start_time: .2f} sec."
+            )
 
     def run(self, data_manager, widget_manager):
         pass
