@@ -21,6 +21,11 @@ class WidgetManager:
             self.logger.debug("Initialized widget_states in session state")
         else:
             self.logger.debug("Found existing widget_states in session state")
+        if "current_value" not in st.session_state:
+            st.session_state.current_value = {}
+            self.logger.debug("Initialized current_value in session state")
+        else:
+            self.logger.debug("Found existing current_value in session state")
 
     def save_widget_state(self, plugin_name, widget_key, value):
         """
@@ -43,7 +48,9 @@ class WidgetManager:
             and returns False.
         """
         try:
-            previous_value = self.load_widget_state(plugin_name, widget_key)
+            previous_value = st.session_state.widget_states.get(
+                plugin_name, {}
+            ).get(widget_key)
             plugin_states = st.session_state.widget_states.get(plugin_name, {})
 
             plugin_states[widget_key] = value
@@ -91,19 +98,36 @@ class WidgetManager:
             and returns the provided default value.
         """
         try:
-            value = st.session_state.widget_states.get(plugin_name, {}).get(
-                widget_key, default
+            value_state = st.session_state.widget_states.get(
+                plugin_name, {}
+            ).get(widget_key, default)
+            is_new_object = widget_key not in st.session_state.widget_states.get(
+                plugin_name, {}
+            )
+            if is_new_object:
+                plugin_current = st.session_state.current_value.get(
+                    plugin_name, {}
+                )
+                plugin_current[widget_key] = value_state
+                st.session_state.current_value[plugin_name] = plugin_current
+            value = (
+                value_state
+                if is_new_object
+                else st.session_state.current_value.get(plugin_name, {})[
+                    widget_key
+                ]
             )
 
             self.logger.debug(
-                "Loading {plugin}.{key} = {value} (default: {default})",
+                "Loading {plugin}.{key} = {value} (value_state: {value_state}) (default: {default})",
                 plugin=plugin_name,
                 key=widget_key,
                 value=repr(value),
+                value_state=repr(value_state),
                 default=repr(default),
             )
 
-            return value
+            return value, is_new_object
         except Exception as e:
             self.logger.error(
                 "Failed to load {plugin}.{key}: {error}",
@@ -111,7 +135,7 @@ class WidgetManager:
                 key=widget_key,
                 error=str(e),
             )
-            return default
+            return default, False
 
     def export_state(self):
         """

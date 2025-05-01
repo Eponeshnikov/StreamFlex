@@ -1,6 +1,7 @@
 import os
 import pickle
 from datetime import datetime
+import streamlit as st
 
 from loguru import logger
 
@@ -99,6 +100,10 @@ class StateManager:
             list: A list of selected plugin names if the snapshot is loaded successfully, None otherwise.
         """
         try:
+            if "current_value" not in st.session_state:
+                st.session_state.current_value = {}
+            else:
+                st.session_state.current_value = {}
             snapshot_path = os.path.join(
                 self.snapshots_dir, f"{snapshot_name}.pkl"
             )

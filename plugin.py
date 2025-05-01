@@ -98,6 +98,7 @@ class Plugin:
             st.session_state[retry_key] = 0
 
         except StreamlitAPIException as e:
+            self.logger.exception(f"Error in {self.get_name()} plugin: {e}")
             if self.rerun_on_err:
                 current_retries = st.session_state[retry_key]
                 if current_retries < self.max_retries:
@@ -168,7 +169,7 @@ class Plugin:
         full_key = f"{self.get_name()}_{widget_name}"
 
         # Load and deserialize saved state
-        saved_raw_value = widget_manager.load_widget_state(
+        saved_raw_value, is_new_object = widget_manager.load_widget_state(
             self.get_name(), widget_name, default_value
         )
         saved_value = value_deserializer(saved_raw_value)
@@ -195,6 +196,7 @@ class Plugin:
             widget_manager.save_widget_state(
                 self.get_name(), widget_name, serialized_value
             )
-            st.rerun(scope=local_rerun_scope)
+            if local_rerun_scope == "app":
+                st.rerun(scope=local_rerun_scope)
 
         return widget_value
