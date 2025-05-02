@@ -236,8 +236,12 @@ def cache_management_ui():
 
 @st.fragment
 def session_state_manager():
-    st.json(st.session_state, expanded=3)
-    st.button("Refresh")
+    toggle_state = st.toggle("Show Session State", key="show_session_state")
+    if toggle_state:
+        st.json(st.session_state, expanded=3)
+        st.button("Refresh")
+    else:
+        st.info("Session state hidden")
 
 
 # Logging configuration
