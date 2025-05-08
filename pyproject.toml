@@ -28,6 +28,7 @@ dev = [
     "ipywidgets>=8.1.5",
     "jupyter>=1.1.1",
     "scikit-learn>=1.6.1",
+    "tqdm>=4.67.1",
 ]
 iqgenerator = [
     "galois>=0.4.4",
