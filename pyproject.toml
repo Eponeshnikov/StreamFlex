@@ -25,10 +25,17 @@ codegenerator = [
     "sdr>=0.0.27",
 ]
 dev = [
+    "catboost>=1.2.8",
+    "dask>=2025.4.1",
+    "dask-ml>=2025.1.0",
     "ipywidgets>=8.1.5",
     "jupyter>=1.1.1",
+    "kaleido==0.2.0",
+    "openpyxl>=3.1.5",
+    "pandarallel>=1.6.5",
     "scikit-learn>=1.6.1",
     "tqdm>=4.67.1",
+    "xgboost>=3.0.0",
 ]
 iqgenerator = [
     "galois>=0.4.4",

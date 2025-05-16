@@ -165,6 +165,6 @@ plugins/
 logs/
 # VSCode
 .vscode/
-output_data/
+output_data*
 .lingma/
 analytics
