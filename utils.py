@@ -5,6 +5,8 @@ import sys
 import numbers
 import ast
 from loguru import logger
+from typing import Type
+import numpy as np
 
 
 def generate_unique_filename(plugin_name, data, *args, **kwargs):
@@ -49,6 +51,21 @@ def save_to_pickle(data, filename, folder="cache"):
 
     return file_path
 
+def read_data(data, save_flag, shape=None, dtype: np.dtype | Type = np.complex64):
+    if save_flag:
+        if data.endswith(".pickle"):
+            with open(data, "rb") as file:
+                readed_data = pickle.load(file)
+        elif data.endswith(".bin"):
+            readed_data = np.memmap(
+                data,
+                dtype=dtype,
+                mode="r",
+                shape=shape,
+            )
+    else:
+        readed_data = data  # 7D np.ndarray
+    return readed_data
 
 # Helper function to safely parse values, especially for None and numbers
 def safe_literal_eval(value_str, expected_type=None, allow_none=False):

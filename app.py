@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 
 import psutil
 import streamlit as st
@@ -322,6 +323,7 @@ def global_trigger():
 
 def main():
     # st.session_state["global_trigger"] = False
+    st.session_state["timestemp"] = datetime.now().strftime("%Y%m%d_%H%M%S")
     st.set_page_config(page_title="Dynamic Plugin System", layout="wide")
 
     st.title("🎛️ StreamFlex")
