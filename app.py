@@ -13,6 +13,44 @@ from utils import get_colored_logs, logger_init
 from widget_manager import WidgetManager
 
 
+class Toc:
+    def __init__(self):
+        self._items = []
+        self._placeholder = None
+
+    def title(self, text):
+        self._markdown(text, "h1")
+
+    def header(self, text):
+        self._markdown(text, "h2", " " * 2)
+
+    def subheader(self, text):
+        self._markdown(text, "h3", " " * 4)
+
+    def placeholder(self, sidebar=False):
+        self._placeholder = st.sidebar.empty() if sidebar else st.empty()
+
+    def generate(self):
+        if self._placeholder:
+            self._placeholder = self._placeholder.container()
+            self._placeholder.subheader("Table of Contents", divider="blue")
+            self._placeholder.markdown(
+                "\n".join(self._items), unsafe_allow_html=True
+            )
+
+    def _markdown(self, text, level, space=""):
+        key = "".join([c if c.isalnum() else "-" for c in text]).lower()
+
+        st.markdown(
+            f"<{level} id='{key}' style='color: #5DADE2; font-style: italic;'>{text}</{level}><hr style='margin: 15px 0; background-color: #5DADE2; height: 1px; border: none;'>",
+            unsafe_allow_html=True,
+        )
+        self._items.append(f"{space}* <a href='#{key}'>{text}</a>")
+
+
+toc = Toc()
+
+
 def get_dir_size(directory):
     """
     Calculate total size of all files in a directory (recursively) in bytes
@@ -421,9 +459,10 @@ def main():
                     except Exception as e:
                         logger.error(f"Delete error: {e}")
                         st.error("❌ Failed to delete snapshot")
-        st.divider()
+        # st.divider()
         global_trigger()
-        st.divider()
+        # st.divider()
+        toc.placeholder(sidebar=True)
         cache_management_ui()
         with st.expander(
             "Rerun Control",
@@ -451,7 +490,7 @@ def main():
                 plugin = plugin_mgr.plugins.get(plugin_name)
                 if plugin:
                     try:
-                        st.subheader(f"_:blue[{plugin_name}]_", divider="blue")
+                        toc.header(f"{plugin_name}")
                         if rerun_scope is not None:
                             plugin.global_rerun_scope = rerun_scope
                         plugin.run_notification(data_mgr, widget_mgr)
@@ -459,6 +498,7 @@ def main():
                     except Exception as e:
                         logger.error(f"Plugin {plugin_name} failed: {e}")
                         st.error(f"❌ Error in {plugin_name}: {str(e)}")
+        toc.generate()
     else:
         st.info(
             "ℹ️ No plugins selected. Choose plugins from the dropdown above."

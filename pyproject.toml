@@ -62,6 +62,12 @@ results-saver-plugin = [
     "polars>=1.29.0",
     "tables>=3.10.2",
 ]
+resultssaverplugin = [
+    "pandas>=2.2.3",
+    "polars>=1.30.0",
+    "pyarrow>=20.0.0",
+    "tables>=3.10.2",
+]
 signal-channelizer = [
     "plotly>=6.0.1",
     "sionna>=1.0.2",
