@@ -169,3 +169,6 @@ output_data*
 .lingma/
 .kilocode/
 analytics
+*.code-workspace
+# Ignore private files in pages directory
+/pages/private_*

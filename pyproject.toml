@@ -36,6 +36,8 @@ dev = [
     "pandarallel>=1.6.5",
     "polars-complex",
     "scikit-learn>=1.6.1",
+    "seaborn>=0.13.2",
+    "shap>=0.48.0",
     "sympy>=1.14.0",
     "tqdm>=4.67.1",
     "xgboost>=3.0.0",
