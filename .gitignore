@@ -172,3 +172,4 @@ analytics
 *.code-workspace
 # Ignore private files in pages directory
 /pages/private_*
+/pages/README.md
