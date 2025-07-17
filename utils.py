@@ -132,7 +132,7 @@ def safe_literal_eval(value_str, expected_type=None, allow_none=False):
         raise ValueError(f"Invalid input format '{value_str}': {e}")
 
 
-def calculate_eta(total_work, completed_work, time_elapsed):
+def calculate_eta(total_work, completed_work, time_elapsed) -> float | str:
     """
     Calculate the estimated time remaining (eta) in seconds.
 
