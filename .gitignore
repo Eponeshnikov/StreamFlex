@@ -173,3 +173,4 @@ analytics
 # Ignore private files in pages directory
 /pages/private_*
 /pages/README.md
+configs/page_categories.yaml
