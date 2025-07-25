@@ -174,3 +174,4 @@ analytics
 /pages/private_*
 /pages/README.md
 configs/page_categories.yaml
+pages/.gitignore
