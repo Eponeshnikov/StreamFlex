@@ -31,6 +31,31 @@ A flexible application framework with plugin support, state snapshots, and dynam
   - `DataManager`: Shared data storage
   - `StateManager`: Snapshot operations
 
+- **📂 Page Categorization**
+  Dynamic page categorization is managed through the `configs/page_categories.yaml` file. This configuration:
+  - Defines categories for organizing pages in the navigation bar
+  - Specifies matching rules (startswith, contains, endswith) for assigning pages to categories
+  - Uses a YAML format with 'match' type ('all' or 'any') and rules list
+  - Example configuration:
+    ```yaml
+    categories:
+      "Peaks Processing":
+        match: all
+        rules:
+          - type: startswith
+          value: "private_"
+          - type: contains
+          value: "peak"
+      
+      "Analytics":
+        match: any
+        rules:
+          - type: contains
+          value: "analysis"
+          - type: endswith
+          value: "_analytics.py"
+    ```
+  - Pages not matching any category are placed in the default "Resources" category
 
 ## 🚀 Usage
 
