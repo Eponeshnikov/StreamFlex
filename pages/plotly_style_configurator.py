@@ -5,6 +5,7 @@ from copy import deepcopy
 
 import plotly.express as px
 import streamlit as st
+from utils import unflatten_dict
 
 # --- CONSTANTS & DEFAULTS ---
 FONTS = [
@@ -65,17 +66,7 @@ def invert_color(rgba_string):
     return rgba_string
 
 
-def unflatten_dict(d):
-    result = {}
-    for key, value in d.items():
-        if key.startswith("layout."):
-            key = key.replace("layout.", "", 1)
-        parts = key.split(".")
-        nested_dict = result
-        for part in parts[:-1]:
-            nested_dict = nested_dict.setdefault(part, {})
-        nested_dict[parts[-1]] = value
-    return result
+
 
 
 # --- THEME MANAGEMENT ---

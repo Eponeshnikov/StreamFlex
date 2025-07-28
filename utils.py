@@ -1,12 +1,264 @@
+import ast
 import hashlib
+
+# custom_plotter.py
+import json
+import numbers
 import os
 import pickle
 import sys
-import numbers
-import ast
-from loguru import logger
+from copy import deepcopy
 from typing import Type
+
 import numpy as np
+import plotly.graph_objects as go
+import streamlit as st
+from loguru import logger
+
+# --- UTILITY FUNCTIONS ---
+
+
+def unflatten_dict(d: dict) -> dict:
+    """Converts a flat dictionary with dot-separated keys to a nested dictionary."""
+    result = {}
+    for key, value in d.items():
+        if key.startswith("layout."):
+            key = key.replace("layout.", "", 1)
+        parts = key.split(".")
+        nested_dict = result
+        for part in parts[:-1]:
+            nested_dict = nested_dict.setdefault(part, {})
+        nested_dict[parts[-1]] = value
+    return result
+
+
+@st.cache_data
+def find_plotly_configs(config_dir: str = "configs/plotly") -> list[str]:
+    """Finds all .json configuration files in the specified directory."""
+    if not os.path.isdir(config_dir):
+        return []
+    return [
+        os.path.splitext(f)[0]
+        for f in os.listdir(config_dir)
+        if f.endswith(".json") and os.path.isfile(os.path.join(config_dir, f))
+    ]
+
+
+@st.cache_data
+def load_plot_config(config_name: str) -> dict:
+    """Loads a specific plot configuration file."""
+    config_path = os.path.join("configs", "plotly", f"{config_name}.json")
+    if not os.path.exists(config_path):
+        st.error(f"Configuration file not found at: `{config_path}`")
+        return {"light": {}, "dark": {}}
+    try:
+        with open(config_path, "r") as f:
+            return json.load(f)
+    except json.JSONDecodeError:
+        st.error(
+            f"Could not parse `{config_path}`. Please ensure it is a valid JSON file."
+        )
+        return {"light": {}, "dark": {}}
+
+
+# --- MAIN RENDERING FUNCTION ---
+
+
+def render_custom_plotly_chart(
+    fig: go.Figure,
+    use_container_width: bool = True,
+    key: str | None = None,
+):
+    """
+    Renders a Plotly chart with an in-app toggle to enable advanced styling controls.
+
+    By default, a standard Streamlit chart is shown. A toggle switch allows the user
+    to access custom theme selection and interactive styling options.
+
+    Args:
+        fig (go.Figure): The Plotly figure object to render.
+        use_container_width (bool, optional): Expand the chart to container's width. Defaults to True.
+        key (str): A unique key for the component. This is REQUIRED if you are rendering
+                more than one chart on the page to prevent widget state collisions.
+    """
+    if key is None:
+        raise ValueError(
+            "The 'key' parameter is required to ensure unique widget IDs. "
+            "Please provide a unique string for each chart you render."
+        )
+
+    # --- Main toggle to switch between standard and custom modes ---
+    custom_mode_key = f"{key}_enable_custom_mode"
+    if custom_mode_key not in st.session_state:
+        st.session_state[custom_mode_key] = False  # Default to off
+
+    st.toggle(
+        "Enable Custom Styling",
+        key=custom_mode_key,
+        help="Toggle to show advanced styling options and apply custom themes.",
+    )
+
+    # --- RENDER LOGIC ---
+    # If custom mode is OFF, display a standard chart
+    if not st.session_state[custom_mode_key]:
+        st.plotly_chart(
+            fig,
+            use_container_width=use_container_width,
+            theme="streamlit",  # Use streamlit's default theme
+            key=f"{key}_default_chart",
+        )
+        return
+
+    # --- If custom mode is ON, display the advanced controls ---
+    else:
+        # 1. FIND AND SELECT CONFIGURATION
+        # ---------------------------------
+        available_configs = find_plotly_configs()
+        if not available_configs:
+            st.error(
+                "No Plotly configuration files found in `configs/plotly/` directory."
+            )
+            st.info(
+                "To use custom styles, please create a theme using a generator app and save it as a .json file in that folder."
+            )
+            st.plotly_chart(fig, use_container_width=use_container_width)
+            return
+
+        # Create UI for selecting config and chart options
+        top_cols = st.columns([3, 1])
+        with top_cols[0]:
+            selected_config_name = st.selectbox(
+                "Select Chart Style",
+                options=available_configs,
+                key=f"{key}_config_select",
+                label_visibility="collapsed",
+            )
+
+        # Load the selected configuration
+        plot_configs = load_plot_config(selected_config_name)
+
+        # 2. INITIALIZE SESSION STATE AND DETECT THEME
+        # ------------------------------------------
+        try:
+            # st.context is deprecated, st.get_option is the modern way
+            current_theme_type = st.context.theme.type
+        except AttributeError:
+            current_theme_type = "light"  # Fallback for older versions
+
+        # Define unique keys for all widgets
+        match_theme_key = f"{key}_match_app_theme"
+        show_legend_key = f"{key}_show_legend"
+        export_format_key = f"{key}_export_format"
+        export_scale_key = f"{key}_export_scale"
+        use_st_theme_key = f"{key}_use_st_theme"
+        show_border_key = f"{key}_show_border"
+
+        # Set defaults in session state if they don't exist
+        if match_theme_key not in st.session_state:
+            st.session_state[match_theme_key] = True
+        if show_legend_key not in st.session_state:
+            theme_for_default = (
+                current_theme_type
+                if st.session_state[match_theme_key]
+                else "light"
+            )
+            st.session_state[show_legend_key] = plot_configs.get(
+                theme_for_default, {}
+            ).get("layout.showlegend", True)
+        if export_format_key not in st.session_state:
+            st.session_state[export_format_key] = "svg"
+        if export_scale_key not in st.session_state:
+            st.session_state[export_scale_key] = 2
+        if use_st_theme_key not in st.session_state:
+            st.session_state[use_st_theme_key] = False
+        if show_border_key not in st.session_state:
+            st.session_state[show_border_key] = True
+
+        # 3. DEFINE UI CONTROLS IN A POPOVER
+        # ------------------------------------
+        with top_cols[1]:
+            with st.popover("⚙️ Options"):
+                st.markdown("**General**")
+                st.checkbox(
+                    "Match App Theme",
+                    key=match_theme_key,
+                    help="Automatically switch between light/dark themes based on the app's theme.",
+                )
+                st.toggle(
+                    "Show Legend",
+                    key=show_legend_key,
+                    help="Show or hide the plot legend.",
+                )
+                st.toggle(
+                    "Use Streamlit Theme",
+                    key=use_st_theme_key,
+                    help="Override custom styles with Streamlit's native theme.",
+                )
+                st.checkbox("Show Container Border", key=show_border_key)
+
+                st.markdown("**Image Export**")
+                st.selectbox(
+                    "Format",
+                    options=["svg", "png", "jpeg", "webp"],
+                    key=export_format_key,
+                )
+                st.number_input(
+                    "Scale (multiplier)",
+                    min_value=1,
+                    max_value=10,
+                    step=1,
+                    key=export_scale_key,
+                )
+
+                with st.expander("View Current Style Config"):
+                    theme_to_display = (
+                        current_theme_type
+                        if st.session_state[match_theme_key]
+                        else "light"
+                    )
+                    st.json(plot_configs.get(theme_to_display, {}))
+
+        # 4. APPLY STYLES AND RENDER
+        # ----------------------------
+        fig_to_render = deepcopy(fig)
+
+        # Determine which theme (light/dark) to use
+        active_style_dict = plot_configs.get(
+            current_theme_type
+            if st.session_state[match_theme_key]
+            else "light",
+            {},
+        )
+
+        # Override style with interactive controls
+        active_style_dict["layout.showlegend"] = st.session_state[
+            show_legend_key
+        ]
+
+        # Unflatten and apply the style dictionary
+        if active_style_dict:
+            nested_style = unflatten_dict(active_style_dict)
+            fig_to_render.update_layout(nested_style)
+
+        chart_config = {
+            "toImageButtonOptions": {
+                "format": st.session_state[export_format_key],
+                "scale": st.session_state[export_scale_key],
+            }
+        }
+
+        chart_theme_param = (
+            "streamlit" if st.session_state[use_st_theme_key] else None
+        )
+
+        with st.container(border=st.session_state[show_border_key]):
+            st.plotly_chart(
+                fig_to_render,
+                use_container_width=use_container_width,
+                config=chart_config,
+                theme=chart_theme_param,
+                key=f"{key}_custom_chart",  # Use a unique key for the custom chart
+            )
 
 
 def generate_unique_filename(plugin_name, data, *args, **kwargs):
@@ -51,7 +303,10 @@ def save_to_pickle(data, filename, folder="cache"):
 
     return file_path
 
-def read_data(data, save_flag, shape=None, dtype: np.dtype | Type = np.complex64):
+
+def read_data(
+    data, save_flag, shape=None, dtype: np.dtype | Type = np.complex64
+):
     if save_flag:
         if data.endswith(".pickle"):
             with open(data, "rb") as file:
@@ -66,6 +321,7 @@ def read_data(data, save_flag, shape=None, dtype: np.dtype | Type = np.complex64
     else:
         readed_data = data  # 7D np.ndarray
     return readed_data
+
 
 # Helper function to safely parse values, especially for None and numbers
 def safe_literal_eval(value_str, expected_type=None, allow_none=False):
