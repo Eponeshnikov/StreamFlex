@@ -92,10 +92,27 @@ def render_custom_plotly_chart(
     if custom_mode_key not in st.session_state:
         st.session_state[custom_mode_key] = False  # Default to off
 
+    # Create columns for toggle and save button
+    toggle_col, save_col = st.columns([1, 4])
+    
+    # with toggle_col:
     st.toggle(
         "Enable Custom Styling",
         key=custom_mode_key,
         help="Toggle to show advanced styling options and apply custom themes.",
+    )
+    
+    # with save_col:
+    # Serialize the figure to bytes for download
+    fig_bytes = pickle.dumps(fig)
+    st.download_button(
+        label="💾 Save Fig",
+        data=fig_bytes,
+        file_name=f"{key}_figure.pickle",
+        mime="application/octet-stream",
+        key=f"{key}_save_pickle_btn",
+        help="Save the current figure as a pickle file",
+        use_container_width=True
     )
 
     # --- RENDER LOGIC ---
