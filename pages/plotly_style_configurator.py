@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import pickle
 from copy import deepcopy
 
 import plotly.express as px
@@ -66,9 +67,6 @@ def invert_color(rgba_string):
     return rgba_string
 
 
-
-
-
 # --- THEME MANAGEMENT ---
 @st.cache_data
 def get_master_light_theme_defaults():
@@ -100,6 +98,7 @@ def get_master_light_theme_defaults():
         "layout.title.pad.t": 10,
         "layout.title.pad.b": 10,
         "layout.title.subtitle.text": "",
+        "layout.title.text": "",
         "layout.title.subtitle.font.color": "rgba(0, 0, 0, 1)",
         "layout.showlegend": True,
         "layout.legend.bgcolor": "rgba(255, 255, 255, 0.7)",
@@ -124,6 +123,7 @@ def get_master_light_theme_defaults():
         "layout.xaxis.gridcolor": "rgba(204, 204, 204, 1)",
         "layout.xaxis.linecolor": "rgba(0, 0, 0, 1)",
         "layout.xaxis.linewidth": 2,
+        "layout.xaxis.title.text": "",
         "layout.xaxis.title.font.family": "Arial",
         "layout.xaxis.title.font.size": 14,
         "layout.xaxis.tickfont.family": "Arial",
@@ -140,6 +140,7 @@ def get_master_light_theme_defaults():
         "layout.yaxis.gridcolor": "rgba(204, 204, 204, 1)",
         "layout.yaxis.linecolor": "rgba(0, 0, 0, 1)",
         "layout.yaxis.linewidth": 2,
+        "layout.yaxis.title.text": "",
         "layout.yaxis.title.font.family": "Arial",
         "layout.yaxis.title.font.size": 14,
         "layout.yaxis.tickfont.family": "Arial",
@@ -183,6 +184,7 @@ def get_master_dark_theme_defaults():
         "layout.title.pad.t": 10,
         "layout.title.pad.b": 10,
         "layout.title.subtitle.text": "",
+        "layout.title.text": "",
         "layout.title.subtitle.font.color": "rgba(255, 255, 255, 1)",
         "layout.showlegend": True,
         "layout.legend.bgcolor": "rgba(51, 51, 51, 0.7)",
@@ -207,6 +209,7 @@ def get_master_dark_theme_defaults():
         "layout.xaxis.gridcolor": "rgba(85, 85, 85, 1)",
         "layout.xaxis.linecolor": "rgba(255, 255, 255, 1)",
         "layout.xaxis.linewidth": 2,
+        "layout.xaxis.title.text": "",
         "layout.xaxis.title.font.family": "Arial",
         "layout.xaxis.title.font.size": 14,
         "layout.xaxis.tickfont.family": "Arial",
@@ -223,6 +226,7 @@ def get_master_dark_theme_defaults():
         "layout.yaxis.gridcolor": "rgba(85, 85, 85, 1)",
         "layout.yaxis.linecolor": "rgba(255, 255, 255, 1)",
         "layout.yaxis.linewidth": 2,
+        "layout.yaxis.title.text": "",
         "layout.yaxis.title.font.family": "Arial",
         "layout.yaxis.title.font.size": 14,
         "layout.yaxis.tickfont.family": "Arial",
@@ -278,18 +282,22 @@ if "themes" not in st.session_state:
         value = light_json.get(key, default_value)
         st.session_state.themes["light"][key] = {
             "value": value,
-            "include": True,
+            "include": False if "title.text" in key.lower() else True,
         }
 
     for key, default_value in dark_master_defaults.items():
         value = dark_json.get(key, default_value)
         st.session_state.themes["dark"][key] = {
             "value": value,
-            "include": True,
+            "include": False if "title.text" in key.lower() else True,
         }
 
 # --- GLOBAL STATE ---
 demo_plots = get_demo_plots()
+# Initialize custom plots dictionary
+if "custom_plots" not in st.session_state:
+    st.session_state.custom_plots = {}
+
 active_theme_name = st.sidebar.radio(
     "Select Theme to Edit:",
     ("light", "dark"),
@@ -297,6 +305,35 @@ active_theme_name = st.sidebar.radio(
     key="theme_selector",
 )
 active_theme_params = st.session_state.themes[active_theme_name]
+
+# Process uploaded pickle files
+pickle_files = st.sidebar.file_uploader(
+    "📂 Upload Plotly Figure Pickle Files",
+    type=["pickle", "pkl"],
+    accept_multiple_files=True,
+    key="pickle_uploader",
+)
+
+if pickle_files:
+    st.session_state.custom_plots = {}
+    for i, pickle_file in enumerate(pickle_files):
+        try:
+            # Load the pickle file
+            fig = pickle.load(pickle_file)
+            # Check if it's a Plotly figure
+            if hasattr(fig, "to_dict"):
+                st.session_state.custom_plots[
+                    f"Custom Plot {i + 1}: {pickle_file.name}"
+                ] = fig
+            else:
+                st.warning(
+                    f"File {pickle_file.name} is not a valid Plotly figure."
+                )
+        except Exception as e:
+            st.error(f"Error loading {pickle_file.name}: {str(e)}")
+
+# Combine demo plots and custom plots
+all_plots = {**demo_plots, **st.session_state.custom_plots}
 
 
 # --- REUSABLE WIDGET CREATION FUNCTIONS ---
@@ -466,9 +503,102 @@ def create_font_widget(label, key, help=None):
 # --- SIDEBAR UI ---
 with st.sidebar:
     st.subheader("Demo Chart")
+    # Select plot from all available plots
     selected_plot = st.selectbox(
-        "Choose a demo plot:", list(demo_plots.keys())
+        "Choose a plot:", list(all_plots.keys()), key="plot_selector"
     )
+
+    st.subheader("Export Settings")
+    export_format = st.selectbox(
+        "Export Format",
+        options=["svg", "png", "jpeg", "webp"],
+        index=0,
+        key="export_format_selector",
+    )
+    export_scale = st.number_input(
+        "Export Scale",
+        min_value=0.5,
+        max_value=20.0,
+        value=3.0,
+        step=0.5,
+        key="export_scale_selector",
+    )
+    chart_theme = st.selectbox(
+        "Chart Theme",
+        options=[None, "streamlit"],
+        index=0,
+        key="chart_theme_selector",
+        format_func=lambda x: "None" if x is None else "Streamlit Theme",
+    )
+
+    st.subheader("Chart Dimensions")
+    dimension_options = {
+        "1:1 (Square)": (500, 500),
+        "4:3 (Standard)": (480, 640),
+        "16:9 (Widescreen)": (360, 640),
+        "3:2 (Index Card)": (400, 600),
+        "Free": (None, None),
+        "Disable": (None, None),
+    }
+
+    selected_ratio = st.selectbox(
+        "Aspect Ratio",
+        options=list(dimension_options.keys()),
+        index=2,  # Default to 16:9
+        key="dimension_ratio_selector",
+    )
+
+    # Get default values for height and width based on selected ratio
+    default_height, default_width = dimension_options[selected_ratio]
+
+    if selected_ratio == "Free" or selected_ratio == "Disable":
+        chart_height = st.number_input(
+            "Height (px)",
+            min_value=100,
+            max_value=2000,
+            value=500,
+            step=50,
+            key="chart_height_selector",
+            disabled=selected_ratio == "Disable",
+        )
+        chart_width = st.number_input(
+            "Width (px)",
+            min_value=100,
+            max_value=2000,
+            value=700,
+            step=50,
+            key="chart_width_selector",
+            disabled=selected_ratio == "Disable",
+        )
+    else:
+        # Use the predefined dimensions but allow override
+        scale_ratio = st.slider(
+            "Scale",
+            min_value=0.5,
+            max_value=10.0,
+            value=1.5,
+            key="dimension_scale_slider",
+        )
+        chart_height = default_height * scale_ratio
+        chart_width = default_width * scale_ratio
+    if selected_ratio != "Disable":
+        # Calculate effective dimensions with export scale
+        export_scale = st.session_state.export_scale_selector
+        effective_width = chart_width * export_scale
+        effective_height = chart_height * export_scale
+        height_width_ratio = effective_height / effective_width
+        width_inch_base = 6.5
+        with_inch_alt = 3.5
+        height_inch = width_inch_base * height_width_ratio
+        height_inch_alt = with_inch_alt * height_width_ratio
+        # Calculate DPI
+        dpi = effective_height / height_inch
+        dpi_alt = effective_height / height_inch_alt
+        st.write(
+            f"Dimensions: {chart_width:.0f} × {chart_height:.0f} px \n\n"
+            f"Export: {effective_width:.0f} × {effective_height:.0f} px \n\n"
+            f"DPI: {dpi:.0f} ({dpi_alt:.0f})"
+        )
 
     st.subheader("Config Management")
     config_filename = st.text_input("Filename", "my_plot_config.json")
@@ -697,6 +827,12 @@ with col1:
                 "layout.title.xanchor",
                 options=["auto", "left", "center", "right"],
             )
+            create_widget(
+                "text_input",
+                "Main Title Text",
+                "layout.title.text",
+                help="Main title text for the plot",
+            )
         with st.expander("✏️ Subtitle", expanded=True):
             create_widget(
                 "text_input", "Subtitle Text", "layout.title.subtitle.text"
@@ -737,6 +873,12 @@ with col1:
                 min_value=-180,
                 max_value=180,
             )
+            create_widget(
+                "text_input",
+                "Axis Title",
+                "layout.xaxis.title.text",
+                help="Main title text for x-axis",
+            )
         with st.expander("📐 Y-Axis", expanded=True):
             create_widget("toggle", "Show Grid", "layout.yaxis.showgrid")
             create_color_widget("Grid Color", "layout.yaxis.gridcolor")
@@ -768,6 +910,12 @@ with col1:
                 "layout.yaxis.tickangle",
                 min_value=-180,
                 max_value=180,
+            )
+            create_widget(
+                "text_input",
+                "Axis Title",
+                "layout.yaxis.title.text",
+                help="Main title text for y-axis",
             )
     with tabs[3]:
         with st.expander("📜 Legend Settings", expanded=True):
@@ -864,13 +1012,55 @@ with col2:
         for key, data in active_theme_params.items()
         if data["include"]
     }
-    fig_to_display = deepcopy(demo_plots[selected_plot])
+    fig_to_display = deepcopy(all_plots[selected_plot])
     nested_style_dict = unflatten_dict(included_style_dict)
 
     if nested_style_dict:
         fig_to_display.update_layout(nested_style_dict)
 
-    st.plotly_chart(fig_to_display, use_container_width=True, theme=None)
+    # Define dimension options for chart sizing
+    dimension_options = {
+        "1:1 (Square)": (500, 500),
+        "4:3 (Standard)": (480, 640),
+        "16:9 (Widescreen)": (360, 640),
+        "3:2 (Index Card)": (400, 600),
+        "Free": (None, None),
+        "Disable": (None, None),
+    }
+
+    # Determine chart dimensions based on selection
+    if st.session_state.dimension_ratio_selector == "Free":
+        chart_height = st.session_state.chart_height_selector
+        chart_width = st.session_state.chart_width_selector
+    else:
+        chart_height, chart_width = dimension_options[
+            st.session_state.dimension_ratio_selector
+        ]
+        if st.session_state.dimension_ratio_selector != "Disable":
+            chart_height *= scale_ratio
+            chart_width *= scale_ratio
+
+    fig_config = {
+        "toImageButtonOptions": {
+            "format": st.session_state.export_format_selector,
+            "scale": st.session_state.export_scale_selector,
+            "height": chart_height,
+            "width": chart_width,
+        },
+    }
+    if st.session_state.dimension_ratio_selector == "Disable":
+        fig_config = {
+            "toImageButtonOptions": {
+                "format": st.session_state.export_format_selector,
+                "scale": st.session_state.export_scale_selector,
+            },
+        }
+    st.plotly_chart(
+        fig_to_display,
+        use_container_width=True,
+        theme=st.session_state.chart_theme_selector,
+        config=fig_config,
+    )
 
     with st.expander("Generated Config", expanded=True):
         st.code(
