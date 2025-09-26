@@ -879,6 +879,12 @@ with col1:
                 "layout.xaxis.title.text",
                 help="Main title text for x-axis",
             )
+            create_widget(
+                "number_input",
+                "Text Font Size",
+                "layout.xaxis.title.font.size",
+                min_value=1,
+            )
         with st.expander("📐 Y-Axis", expanded=True):
             create_widget("toggle", "Show Grid", "layout.yaxis.showgrid")
             create_color_widget("Grid Color", "layout.yaxis.gridcolor")
@@ -916,6 +922,12 @@ with col1:
                 "Axis Title",
                 "layout.yaxis.title.text",
                 help="Main title text for y-axis",
+            )
+            create_widget(
+                "number_input",
+                "Text Font Size",
+                "layout.yaxis.title.font.size",
+                min_value=1,
             )
     with tabs[3]:
         with st.expander("📜 Legend Settings", expanded=True):
