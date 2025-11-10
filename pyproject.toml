@@ -17,7 +17,7 @@ dependencies = [
 [dependency-groups]
 cir-generator = [
     "plotly>=6.0.1",
-    "sionna>=1.2.0",
+    "sionna>=1.2.1",
     "tensorflow[and-cuda]>=2.18.1,<=2.19",
 ]
 codegenerator = [
@@ -53,18 +53,18 @@ dev = [
 iqgenerator = [
     "galois>=0.4.4",
     "plotly>=6.0.1",
-    "sionna>=1.2.0",
+    "sionna>=1.2.1",
     "tensorflow[and-cuda]>=2.18.1,<=2.19",
 ]
 opti-receiver = [
     "plotly>=6.0.1",
     "pywavelets>=1.8.0",
-    "sionna>=1.2.0",
+    "sionna>=1.2.1",
     "tensorflow[and-cuda]>=2.18.1,<=2.19",
 ]
 pulse-shaping = [
     "plotly>=6.0.1",
-    "sionna>=1.2.0",
+    "sionna>=1.2.1",
     "tensorflow[and-cuda]>=2.18.1,<=2.19",
 ]
 results-saver-plugin = [
@@ -80,7 +80,7 @@ resultssaverplugin = [
 ]
 signal-channelizer = [
     "plotly>=6.0.1",
-    "sionna>=1.2.0",
+    "sionna>=1.2.1",
     "tensorflow[and-cuda]>=2.18.1,<=2.19",
 ]
 
