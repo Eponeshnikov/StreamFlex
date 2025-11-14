@@ -175,3 +175,5 @@ analytics
 /pages/README.md
 configs/page_categories.yaml
 pages/.gitignore
+other_docs
+sionna-scenes

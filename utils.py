@@ -14,8 +14,7 @@ import numpy as np
 import plotly.graph_objects as go
 import streamlit as st
 from loguru import logger
-import streamlit.components.v1 as components
-import re
+import traceback
 
 # --- UTILITY FUNCTIONS ---
 
@@ -617,545 +616,231 @@ def cache_result(reset=False):
     return decorator
 
 
-def extract_scene_data(_scene, _paths, clip_at=20, resolution=(1400, 600)):
+
+
+def get_object_color(obj):
     """
-    Extract scene data from Sionna preview for Three.js rendering.
-
-    Args:
-        _scene: Sionna scene object (prefixed with _ to avoid hashing)
-        _paths: Computed paths from PathSolver (prefixed with _ to avoid hashing)
-        clip_at: Clipping parameter for preview
-        resolution: Preview resolution tuple (width, height)
-
-    Returns:
-        tuple: (geometry_data, paths_data, points_data, camera_info)
-    """
-    # Render scene preview to get widget data
-    _scene.preview(paths=_paths, clip_at=clip_at, resolution=resolution)
-    widget = _scene._preview_widget
-
-    if not widget:
-        raise ValueError("Widget not created")
-
-    html = widget._repr_html_()
-    html_file = open("filename.html", "w")
-    html_file.write(html)
-    html_file.close()
-    match = re.search(
-        r'<script type="application/vnd\.jupyter\.widget-state\+json">\s*(\{.*?\})\s*</script>',
-        html,
-        re.DOTALL,
-    )
-
-    if not match:
-        raise ValueError("Could not extract widget state")
-
-    widget_state = json.loads(match.group(1))
-    models = widget_state["state"]
-
-    # Extract components
-    renderer_data = None
-    camera_data = None
-    geometries = []
-    line_segments_geometries = []
-    points_models = []
-
-    for model_id, model in models.items():
-        model_name = model["model_name"]
-        if model_name == "RendererModel":
-            renderer_data = model["state"]
-        elif model_name == "PerspectiveCameraModel":
-            camera_data = model["state"]
-        elif model_name == "BufferGeometryModel":
-            geometries.append((model_id, model))
-        elif model_name == "LineSegmentsGeometryModel":
-            line_segments_geometries.append((model_id, model))
-        elif model_name == "PointsModel":
-            points_models.append(model)
-
-    if not (renderer_data and camera_data):
-        raise ValueError("Missing renderer or camera data")
-
-    width = renderer_data.get("_width", 800)
-    height = renderer_data.get("_height", 600)
-    camera_pos = camera_data.get("position", [100, 100, 100])
-    camera_fov = camera_data.get("fov", 45)
-
-    # Process scene geometry (large meshes)
-    geometry_data_js = []
-    for geom_id, geom_model in geometries:
-        attributes = geom_model["state"].get("attributes", {})
-
-        position_data = None
-        index_data = None
-        color_data = None
-
-        if "position" in attributes:
-            pos_id = attributes["position"].replace("IPY_MODEL_", "")
-            if pos_id in models:
-                pos_model = models[pos_id]
-                pos_shape = (
-                    pos_model.get("state", {})
-                    .get("array", {})
-                    .get("shape", [])
-                )
-                # Only large buffers (scene geometry)
-                if len(pos_shape) == 2 and pos_shape[0] > 100:
-                    pos_buffers = pos_model.get("buffers", [])
-                    if pos_buffers:
-                        position_data = pos_buffers[0]["data"]
-
-        if "index" in attributes and position_data:
-            idx_id = attributes["index"].replace("IPY_MODEL_", "")
-            if idx_id in models:
-                idx_buffers = models[idx_id].get("buffers", [])
-                if idx_buffers:
-                    index_data = idx_buffers[0]["data"]
-
-        if "color" in attributes and position_data:
-            col_id = attributes["color"].replace("IPY_MODEL_", "")
-            if col_id in models:
-                col_buffers = models[col_id].get("buffers", [])
-                if col_buffers:
-                    color_data = col_buffers[0]["data"]
-
-        if position_data:
-            geometry_data_js.append(
-                {
-                    "position": position_data,
-                    "index": index_data,
-                    "color": color_data,
-                }
-            )
-
-    # Process paths (line segments)
-    paths_data_js = []
-    for geom_id, geom_model in line_segments_geometries:
-        buffers = geom_model.get("buffers", [])
-
-        position_data = None
-        color_data = None
-
-        for buffer in buffers:
-            path = buffer.get("path", [])
-            data = buffer.get("data", "")
-            if path == ["positions", "buffer"]:
-                position_data = data
-            elif path == ["colors", "buffer"]:
-                color_data = data
-
-        if position_data:
-            paths_data_js.append(
-                {
-                    "positions": position_data,
-                    "colors": color_data,
-                }
-            )
-
-    # Process TX/RX points
-    points_data_js = []
-
-    # Method 1: Get from PointsModel
-    for points_model in points_models:
-        geometry_ref = points_model.get("geometry", "")
-        if geometry_ref:
-            geom_id = geometry_ref.replace("IPY_MODEL_", "")
-            if geom_id in models:
-                geom_model = models[geom_id]
-                attributes = geom_model["state"].get("attributes", {})
-
-                position_data = None
-                color_data = None
-
-                if "position" in attributes:
-                    pos_id = attributes["position"].replace("IPY_MODEL_", "")
-                    if pos_id in models:
-                        pos_buffers = models[pos_id].get("buffers", [])
-                        if pos_buffers:
-                            position_data = pos_buffers[0]["data"]
-
-                if "color" in attributes:
-                    col_id = attributes["color"].replace("IPY_MODEL_", "")
-                    if col_id in models:
-                        col_buffers = models[col_id].get("buffers", [])
-                        if col_buffers:
-                            color_data = col_buffers[0]["data"]
-
-                if position_data:
-                    points_data_js.append(
-                        {
-                            "position": position_data,
-                            "color": color_data,
-                        }
-                    )
-
-    # Method 2: Also check small geometries directly (TX/RX as points)
-    for geom_id, geom_model in geometries:
-        attributes = geom_model["state"].get("attributes", {})
-
-        if "position" in attributes:
-            pos_id = attributes["position"].replace("IPY_MODEL_", "")
-            if pos_id in models:
-                pos_model = models[pos_id]
-                pos_shape = (
-                    pos_model.get("state", {})
-                    .get("array", {})
-                    .get("shape", [])
-                )
-                # Small buffers (TX/RX) - shape [2, 3]
-                if len(pos_shape) == 2 and pos_shape[0] == 2:
-                    pos_buffers = pos_model.get("buffers", [])
-                    if pos_buffers:
-                        position_data = pos_buffers[0]["data"]
-
-                        color_data = None
-                        if "color" in attributes:
-                            col_id = attributes["color"].replace(
-                                "IPY_MODEL_", ""
-                            )
-                            if col_id in models:
-                                col_buffers = models[col_id].get("buffers", [])
-                                if col_buffers:
-                                    color_data = col_buffers[0]["data"]
-
-                        points_data_js.append(
-                            {
-                                "position": position_data,
-                                "color": color_data,
-                            }
-                        )
-
-    camera_info = {
-        "width": width,
-        "height": height,
-        "camera_pos": camera_pos,
-        "camera_fov": camera_fov,
-    }
-
-    return geometry_data_js, paths_data_js, points_data_js, camera_info
-
-
-def create_threejs_html(
-    geometry_data_js, paths_data_js, points_data_js, camera_info
-):
-    """
-    Create Three.js HTML from extracted scene data.
-
-    Args:
-        geometry_data_js: Processed geometry data
-        paths_data_js: Processed paths data
-        points_data_js: Processed points data
-        camera_info: Camera information dictionary
-
-    Returns:
-        str: Complete HTML string for Three.js rendering
-    """
-    geometry_json = json.dumps(geometry_data_js)
-    paths_json = json.dumps(paths_data_js)
-    points_json = json.dumps(points_data_js)
-
-    width = camera_info["width"]
-    height = camera_info["height"]
-    camera_pos = camera_info["camera_pos"]
-    camera_fov = camera_info["camera_fov"]
-
-    return f"""
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <style>
-        body {{ margin: 0; padding: 0; overflow: hidden; background: #87CEEB; }}
-        #container {{ width: 100%; height: 100vh; }}
-        #info {{
-            position: absolute; top: 10px; left: 10px;
-            background: rgba(0,0,0,0.7); color: white;
-            padding: 10px; border-radius: 5px;
-            font-family: monospace; font-size: 12px; z-index: 100;
-        }}
-        #legend {{
-            position: absolute; bottom: 10px; left: 10px;
-            background: rgba(255,255,255,0.95); color: black;
-            padding: 15px; border-radius: 5px;
-            font-family: sans-serif; font-size: 13px; z-index: 100;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-        }}
-        .legend-item {{
-            display: flex; align-items: center;
-            margin: 8px 0;
-        }}
-        .legend-color {{
-            width: 30px; height: 3px;
-            margin-right: 10px;
-            display: inline-block;
-        }}
-        .legend-point {{
-            width: 12px; height: 12px;
-            border-radius: 50%;
-            margin-right: 10px;
-            display: inline-block;
-        }}
-    </style>
-</head>
-<body>
-    <div id="info">
-        <strong>Sionna Scene with Paths</strong><br>
-        Left mouse: Rotate | Right mouse: Pan | Scroll: Zoom
-    </div>
-    <div id="legend">
-        <strong>Legend</strong>
-        <div class="legend-item">
-            <span class="legend-color" style="background-color: rgb(127, 127, 127);"></span>
-            <span>Line-of-sight</span>
-        </div>
-        <div class="legend-item">
-            <span class="legend-color" style="background-color: rgb(153, 153, 255);"></span>
-            <span>Specular reflection</span>
-        </div>
-        <div class="legend-item">
-            <span class="legend-color" style="background-color: rgb(255, 153, 153);"></span>
-            <span>Refraction</span>
-        </div>
-        <div class="legend-item">
-            <span class="legend-point" style="background-color: rgb(255, 0, 0);"></span>
-            <span>Transmitter</span>
-        </div>
-        <div class="legend-item">
-            <span class="legend-point" style="background-color: rgb(102, 204, 102);"></span>
-            <span>Receiver</span>
-        </div>
-    </div>
-    <div id="container"></div>
-    
-    <script type="importmap">
-    {{
-        "imports": {{
-            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
-        }}
-    }}
-    </script>
-    
-    <script type="module">
-        import * as THREE from 'three';
-        import {{ OrbitControls }} from 'three/addons/controls/OrbitControls.js';
-        
-        const geometryData = {geometry_json};
-        const pathsData = {paths_json};
-        const pointsData = {points_json};
-        
-        function base64ToArrayBuffer(base64) {{
-            const binaryString = atob(base64);
-            const bytes = new Uint8Array(binaryString.length);
-            for (let i = 0; i < binaryString.length; i++) {{
-                bytes[i] = binaryString.charCodeAt(i);
-            }}
-            return bytes.buffer;
-        }}
-        
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0xffffff);
-        
-        const camera = new THREE.PerspectiveCamera(
-            {camera_fov}, {width} / {height}, 0.1, 20000
-        );
-        camera.position.set({camera_pos[0]}, {camera_pos[1]}, {camera_pos[2]});
-        camera.up.set(0, 0, 1);
-        
-        const renderer = new THREE.WebGLRenderer({{ antialias: true }});
-        renderer.setSize({width}, {height});
-        document.getElementById('container').appendChild(renderer.domElement);
-        
-        const controls = new OrbitControls(camera, renderer.domElement);
-        controls.enableDamping = true;
-        controls.dampingFactor = 0.05;
-        
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
-        scene.add(ambientLight);
-        
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.25);
-        camera.add(directionalLight);
-        scene.add(camera);
-        
-        // Render scene geometry
-        for (const geomData of geometryData) {{
-            try {{
-                const posBuffer = base64ToArrayBuffer(geomData.position);
-                const positions = new Float32Array(posBuffer);
-                
-                const idxBuffer = base64ToArrayBuffer(geomData.index);
-                const indices = new Uint32Array(idxBuffer);
-                
-                let colors = null;
-                if (geomData.color) {{
-                    const colBuffer = base64ToArrayBuffer(geomData.color);
-                    colors = new Float32Array(colBuffer);
-                }}
-                
-                const geometry = new THREE.BufferGeometry();
-                geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-                geometry.setIndex(new THREE.BufferAttribute(indices, 1));
-                
-                if (colors) {{
-                    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-                }}
-                
-                const material = new THREE.MeshStandardMaterial({{
-                    vertexColors: colors ? true : false,
-                    flatShading: true,
-                    roughness: 1.0,
-                    metalness: 0.0,
-                    side: THREE.DoubleSide
-                }});
-                
-                const mesh = new THREE.Mesh(geometry, material);
-                scene.add(mesh);
-            }} catch (error) {{
-                console.error('Error processing geometry:', error);
-            }}
-        }}
-        
-        // Render paths
-        console.log('Processing', pathsData.length, 'path groups');
-        for (const pathData of pathsData) {{
-            try {{
-                // Decode positions buffer - shape is [153, 2, 3]
-                const posBuffer = base64ToArrayBuffer(pathData.positions);
-                const positions = new Float32Array(posBuffer);
-                
-                // Decode colors buffer if available
-                let colors = null;
-                if (pathData.colors) {{
-                    const colBuffer = base64ToArrayBuffer(pathData.colors);
-                    colors = new Float32Array(colBuffer);
-                }}
-                
-                // Create geometry with the flattened positions
-                const geometry = new THREE.BufferGeometry();
-                geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-                
-                if (colors) {{
-                    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-                }}
-                
-                // Use LineSegments for proper rendering
-                const material = new THREE.LineBasicMaterial({{
-                    vertexColors: colors ? true : false,
-                    linewidth: 2
-                }});
-                
-                const lineSegments = new THREE.LineSegments(geometry, material);
-                scene.add(lineSegments);
-                
-                console.log('Added path with', positions.length / 3, 'vertices');
-            }} catch (error) {{
-                console.error('Error processing paths:', error);
-            }}
-        }}
-        
-        // Render TX/RX points
-        console.log('Processing', pointsData.length, 'point groups');
-        for (const pointData of pointsData) {{
-            try {{
-                const posBuffer = base64ToArrayBuffer(pointData.position);
-                const positions = new Float32Array(posBuffer);
-                
-                let colors = null;
-                if (pointData.color) {{
-                    const colBuffer = base64ToArrayBuffer(pointData.color);
-                    colors = new Float32Array(colBuffer);
-                }}
-                
-                const geometry = new THREE.BufferGeometry();
-                geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-                
-                if (colors) {{
-                    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-                }}
-                
-                // Larger spheres for better visibility
-                const numPoints = positions.length / 3;
-                for (let i = 0; i < numPoints; i++) {{
-                    const sphereGeometry = new THREE.SphereGeometry(3, 16, 16);
-                    const sphereMaterial = new THREE.MeshStandardMaterial({{
-                        color: colors ? new THREE.Color(colors[i*3], colors[i*3+1], colors[i*3+2]) : 0xff0000,
-                        emissive: colors ? new THREE.Color(colors[i*3], colors[i*3+1], colors[i*3+2]) : 0xff0000,
-                        emissiveIntensity: 0.3
-                    }});
-                    const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
-                    sphere.position.set(positions[i*3], positions[i*3+1], positions[i*3+2]);
-                    scene.add(sphere);
-                }}
-                
-                console.log('Added', numPoints, 'TX/RX points');
-            }} catch (error) {{
-                console.error('Error processing points:', error);
-            }}
-        }}
-        
-        console.log('Scene setup complete');
-        
-        const axesHelper = new THREE.AxesHelper(500);
-        scene.add(axesHelper);
-        
-        function animate() {{
-            requestAnimationFrame(animate);
-            controls.update();
-            renderer.render(scene, camera);
-        }}
-        animate();
-        
-        window.addEventListener('resize', () => {{
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        }});
-    </script>
-</body>
-</html>
-    """
-
-
-def render_scene_with_paths(scene, paths, clip_at=20, resolution=(1400, 600)):
-    """
-    Render Sionna scene with paths using Three.js in Streamlit.
-
-    Args:
-        scene: Sionna scene object
-        paths: Computed paths from PathSolver
-        clip_at: Clipping parameter for preview
-        resolution: Preview resolution tuple (width, height)
-
-    Returns:
-        bool: True if rendering was successful
+    Extract color/texture information from a scene object.
+    Returns RGB color as hex string.
     """
     try:
-        # Extract scene data (without caching since scene object can't be hashed)
-        geometry_data, paths_data, points_data, camera_info = (
-            extract_scene_data(scene, paths, clip_at, resolution)
-        )
+        if hasattr(obj, 'radio_material') and obj.radio_material is not None:
+            mat = obj.radio_material
+            if hasattr(mat, 'color'):
+                color = mat.color
+                if hasattr(color, 'numpy'):
+                    rgb = color.numpy()
+                    return f'#{int(rgb[0]*255):02x}{int(rgb[1]*255):02x}{int(rgb[2]*255):02x}'
+        
+        if hasattr(obj, 'mi_shape') and obj.mi_shape is not None:
+            shape = obj.mi_shape
+            if hasattr(shape, 'bsdf'):
+                bsdf = shape.bsdf()
+                if hasattr(bsdf, 'reflectance'):
+                    refl = bsdf.reflectance()
+                    if hasattr(refl, 'value'):
+                        val = refl.value()
+                        if hasattr(val, 'numpy'):
+                            rgb = val.numpy()
+                            return f'#{int(rgb[0]*255):02x}{int(rgb[1]*255):02x}{int(rgb[2]*255):02x}'
+    except Exception:
+        pass
+    return "lightgray"
 
-        # Generate HTML with caching based on the extracted data
-        @st.cache_resource(ttl=300)
-        def get_cached_html(
-            _geometry_data, _paths_data, _points_data, _camera_info
-        ):
-            return create_threejs_html(
-                _geometry_data, _paths_data, _points_data, _camera_info
+
+def render_sionna_scene_plotly(
+    scene, paths=None, show_paths=True, show_legend=True, show_objects=True, building_opacity=0.5
+):
+    """
+    Render a Sionna scene using Plotly in Streamlit.
+    """
+    fig = go.Figure()
+
+    path_colors = {
+        "los": "gray",
+        "specular": "cornflowerblue",
+        "diffuse": "darkseagreen",
+        "refraction": "lightcoral",
+        "diffraction": "blueviolet",
+    }
+    path_widths = {"los": 4}
+
+    if show_objects:
+        for obj_name, obj in scene.objects.items():
+            try:
+                mesh = obj.mi_mesh
+                vertices = mesh.vertex_positions_buffer().numpy()
+                faces = mesh.faces_buffer().numpy()
+                
+                x, y, z = vertices[0::3], vertices[1::3], vertices[2::3]
+                i, j, k = faces[0::3], faces[1::3], faces[2::3]
+
+                obj_color = get_object_color(obj)
+
+                fig.add_trace(
+                    go.Mesh3d(
+                        x=x, y=y, z=z, i=i, j=j, k=k,
+                        opacity=building_opacity, color=obj_color, name=obj_name,
+                        showlegend=False, hoverinfo="name"
+                    )
+                )
+            except Exception:
+                pass
+
+    for tx_name, tx in scene.transmitters.items():
+        pos = tx.position.numpy()
+        fig.add_trace(
+            go.Scatter3d(
+                x=[float(pos[0])], y=[float(pos[1])], z=[float(pos[2])],
+                mode="markers", marker=dict(size=8, color="red", symbol="circle"),
+                name=f"TX: {tx_name}", showlegend=show_legend,
+                legendgroup="transmitters", legendgrouptitle_text="Transmitters"
             )
-
-        threejs_html = get_cached_html(
-            geometry_data, paths_data, points_data, camera_info
         )
 
-        # Render the component
-        components.html(
-            threejs_html,
-            height=camera_info["height"] + 50,
-            scrolling=False,
+    for rx_name, rx in scene.receivers.items():
+        pos = rx.position.numpy()
+        fig.add_trace(
+            go.Scatter3d(
+                x=[float(pos[0])], y=[float(pos[1])], z=[float(pos[2])],
+                mode="markers", marker=dict(size=8, color="green", symbol="circle"),
+                name=f"RX: {rx_name}", showlegend=show_legend,
+                legendgroup="receivers", legendgrouptitle_text="Receivers"
+            )
         )
 
-        return True
+    if show_paths and paths is not None:
+        # --- CHANGE: Pass the scene object to the path rendering function ---
+        add_paths_to_figure(fig, scene, paths, path_colors, path_widths, show_legend)
+
+    fig.update_layout(
+        scene=dict(
+            xaxis_title="X (m)", yaxis_title="Y (m)", zaxis_title="Z (m)",
+            aspectmode="data", camera=dict(eye=dict(x=1.5, y=1.5, z=1.5))
+        ),
+        title="Sionna Scene Visualization",
+        showlegend=show_legend,
+        legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01),
+        height=700,
+        margin=dict(l=0, r=0, t=30, b=0),
+    )
+    return fig
+
+
+def add_paths_to_figure(fig, scene, paths, path_colors, path_widths, show_legend):
+    """
+    Add propagation paths to the Plotly figure.
+    """
+    added_to_legend = set()
+
+    try:
+        vertices_np = paths.vertices.numpy()
+        interactions_np = paths.interactions.numpy()
+        valid_np = paths.valid.numpy()
+
+        source_positions_np = np.stack([
+            paths.sources.x.numpy(), paths.sources.y.numpy(), paths.sources.z.numpy()
+        ], axis=1)
+
+        target_positions_np = np.stack([
+            paths.targets.x.numpy(), paths.targets.y.numpy(), paths.targets.z.numpy()
+        ], axis=1)
+        
+        # --- FIX: Get geometric antenna counts from the scene ---
+        # This is the number of physical antenna elements per device.
+        num_ant_per_tx = scene.tx_array.array_size
+        num_ant_per_rx = scene.rx_array.array_size
+
+        is_synthetic = paths.synthetic_array
+
+        if is_synthetic:
+            max_depth, num_rx, num_tx, num_paths, _ = vertices_np.shape
+            num_rx_ant_paths, num_tx_ant_paths = 1, 1
+        else:
+            # These dimensions might include polarization, so we name them _paths
+            max_depth, num_rx, num_rx_ant_paths, num_tx, num_tx_ant_paths, num_paths, _ = vertices_np.shape
+
+        for rx_idx in range(num_rx):
+            for tx_idx in range(num_tx):
+                # Loop over the antenna dimension from the paths tensor
+                for rx_ant_idx in range(num_rx_ant_paths):
+                    for tx_ant_idx in range(num_tx_ant_paths):
+                        for path_idx in range(num_paths):
+                            if is_synthetic:
+                                is_valid = valid_np[rx_idx, tx_idx, path_idx]
+                            else:
+                                is_valid = valid_np[rx_idx, rx_ant_idx, tx_idx, tx_ant_idx, path_idx]
+
+                            if not is_valid:
+                                continue
+
+                            path_type = "los"
+                            for depth_idx in range(max_depth):
+                                if is_synthetic:
+                                    interaction_type = int(interactions_np[depth_idx, rx_idx, tx_idx, path_idx])
+                                else:
+                                    interaction_type = int(interactions_np[depth_idx, rx_idx, rx_ant_idx, tx_idx, tx_ant_idx, path_idx])
+                                if interaction_type != 0:
+                                    path_type = get_path_type_name(interaction_type)
+                                    break
+                            
+                            color = path_colors.get(path_type, "gray")
+                            width = path_widths.get(path_type, 2)
+
+                            # --- FIX: Calculate flat index using GEOMETRIC counts ---
+                            # This correctly maps the path back to its physical antenna position,
+                            # even if the paths tensor has extra dimensions for polarization.
+                            flat_tx_ant_idx = tx_idx * num_ant_per_tx + (tx_ant_idx % num_ant_per_tx)
+                            source_pos = source_positions_np[flat_tx_ant_idx]
+                            
+                            path_coords = [source_pos]
+
+                            for depth_idx in range(max_depth):
+                                if is_synthetic:
+                                    vertex = vertices_np[depth_idx, rx_idx, tx_idx, path_idx]
+                                else:
+                                    vertex = vertices_np[depth_idx, rx_idx, rx_ant_idx, tx_idx, tx_ant_idx, path_idx]
+                                if np.any(vertex != 0):
+                                    path_coords.append(vertex)
+
+                            # --- FIX: Calculate flat index using GEOMETRIC counts ---
+                            flat_rx_ant_idx = rx_idx * num_ant_per_rx + (rx_ant_idx % num_ant_per_rx)
+                            target_pos = target_positions_np[flat_rx_ant_idx]
+                            path_coords.append(target_pos)
+
+                            path_x, path_y, path_z = zip(*[p.tolist() for p in path_coords])
+                            if len(path_x) > 2:  # Has intermediate vertices beyond the TX position
+                                path_x, path_y, path_z = path_x[:-2] + (path_x[-1],), path_y[:-2] + (path_y[-1],), path_z[:-2] + (path_z[-1],)
+
+                            show_in_legend = show_legend and (path_type not in added_to_legend)
+                            if show_in_legend:
+                                added_to_legend.add(path_type)
+
+                            fig.add_trace(
+                                go.Scatter3d(
+                                    x=path_x, y=path_y, z=path_z,
+                                    mode="lines", line=dict(color=color, width=width),
+                                    name=path_type.replace("_", " ").title(),
+                                    showlegend=show_in_legend,
+                                    legendgroup=f"paths_{path_type}", hoverinfo="name"
+                                )
+                            )
     except Exception as e:
-        st.error(f"Error rendering scene: {str(e)}")
-        return False
+        st.error(f"Could not render paths: {str(e)}")
+        st.code(traceback.format_exc())
+
+
+def get_path_type_name(interaction_type):
+    """
+    Convert interaction type constant to path type name.
+    """
+    if interaction_type == 1:
+        return "specular"
+    elif interaction_type == 2:
+        return "diffuse"
+    elif interaction_type == 8:
+        return "diffraction"
+    elif interaction_type == 4:
+        return "refraction"
+    else:
+        return "los"
