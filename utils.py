@@ -649,7 +649,8 @@ def get_object_color(obj):
 
 
 def render_sionna_scene_plotly(
-    scene, paths=None, show_paths=True, show_legend=True, show_objects=True, building_opacity=0.5
+    scene, paths=None, show_paths=True, show_legend=True, show_objects=True, building_opacity=0.5,
+    selected_tx_names=None, selected_rx_names=None
 ):
     """
     Render a Sionna scene using Plotly in Streamlit.
@@ -687,31 +688,37 @@ def render_sionna_scene_plotly(
             except Exception:
                 pass
 
+    # Only render selected transmitters
     for tx_name, tx in scene.transmitters.items():
-        pos = tx.position.numpy()
-        fig.add_trace(
-            go.Scatter3d(
-                x=[float(pos[0])], y=[float(pos[1])], z=[float(pos[2])],
-                mode="markers", marker=dict(size=8, color="red", symbol="circle"),
-                name=f"TX: {tx_name}", showlegend=show_legend,
-                legendgroup="transmitters", legendgrouptitle_text="Transmitters"
+        # If selected_tx_names is None or empty, render all TX
+        if selected_tx_names is None or len(selected_tx_names) == 0 or tx_name in selected_tx_names:
+            pos = tx.position.numpy()
+            fig.add_trace(
+                go.Scatter3d(
+                    x=[float(pos[0])], y=[float(pos[1])], z=[float(pos[2])],
+                    mode="markers", marker=dict(size=8, color="red", symbol="circle"),
+                    name=f"TX: {tx_name}", showlegend=show_legend,
+                    legendgroup="transmitters", legendgrouptitle_text="Transmitters"
+                )
             )
-        )
 
+    # Only render selected receivers
     for rx_name, rx in scene.receivers.items():
-        pos = rx.position.numpy()
-        fig.add_trace(
-            go.Scatter3d(
-                x=[float(pos[0])], y=[float(pos[1])], z=[float(pos[2])],
-                mode="markers", marker=dict(size=8, color="green", symbol="circle"),
-                name=f"RX: {rx_name}", showlegend=show_legend,
-                legendgroup="receivers", legendgrouptitle_text="Receivers"
+        # If selected_rx_names is None or empty, render all RX
+        if selected_rx_names is None or len(selected_rx_names) == 0 or rx_name in selected_rx_names:
+            pos = rx.position.numpy()
+            fig.add_trace(
+                go.Scatter3d(
+                    x=[float(pos[0])], y=[float(pos[1])], z=[float(pos[2])],
+                    mode="markers", marker=dict(size=8, color="green", symbol="circle"),
+                    name=f"RX: {rx_name}", showlegend=show_legend,
+                    legendgroup="receivers", legendgrouptitle_text="Receivers"
+                )
             )
-        )
 
     if show_paths and paths is not None:
         # --- CHANGE: Pass the scene object to the path rendering function ---
-        add_paths_to_figure(fig, scene, paths, path_colors, path_widths, show_legend)
+        add_paths_to_figure(fig, scene, paths, path_colors, path_widths, show_legend, selected_tx_names, selected_rx_names)
 
     fig.update_layout(
         scene=dict(
@@ -727,7 +734,7 @@ def render_sionna_scene_plotly(
     return fig
 
 
-def add_paths_to_figure(fig, scene, paths, path_colors, path_widths, show_legend):
+def add_paths_to_figure(fig, scene, paths, path_colors, path_widths, show_legend, selected_tx_names=None, selected_rx_names=None):
     """
     Add propagation paths to the Plotly figure.
     """
@@ -762,6 +769,18 @@ def add_paths_to_figure(fig, scene, paths, path_colors, path_widths, show_legend
 
         for rx_idx in range(num_rx):
             for tx_idx in range(num_tx):
+                # Get the actual TX and RX names to check if they're selected
+                tx_name = list(scene.transmitters.keys())[tx_idx] if tx_idx < len(scene.transmitters) else f"tx{tx_idx}"
+                rx_name = list(scene.receivers.keys())[rx_idx] if rx_idx < len(scene.receivers) else f"rx{rx_idx}"
+                
+                # Check if both TX and RX are selected (or if no selection is made)
+                tx_selected = selected_tx_names is None or len(selected_tx_names) == 0 or tx_name in selected_tx_names
+                rx_selected = selected_rx_names is None or len(selected_rx_names) == 0 or rx_name in selected_rx_names
+                
+                # Skip if either TX or RX is not selected
+                if not tx_selected or not rx_selected:
+                    continue
+                
                 # Loop over the antenna dimension from the paths tensor
                 for rx_ant_idx in range(num_rx_ant_paths):
                     for tx_ant_idx in range(num_tx_ant_paths):
