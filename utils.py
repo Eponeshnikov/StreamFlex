@@ -628,21 +628,8 @@ def get_object_color(obj):
             mat = obj.radio_material
             if hasattr(mat, 'color'):
                 color = mat.color
-                if hasattr(color, 'numpy'):
-                    rgb = color.numpy()
-                    return f'#{int(rgb[0]*255):02x}{int(rgb[1]*255):02x}{int(rgb[2]*255):02x}'
-        
-        if hasattr(obj, 'mi_shape') and obj.mi_shape is not None:
-            shape = obj.mi_shape
-            if hasattr(shape, 'bsdf'):
-                bsdf = shape.bsdf()
-                if hasattr(bsdf, 'reflectance'):
-                    refl = bsdf.reflectance()
-                    if hasattr(refl, 'value'):
-                        val = refl.value()
-                        if hasattr(val, 'numpy'):
-                            rgb = val.numpy()
-                            return f'#{int(rgb[0]*255):02x}{int(rgb[1]*255):02x}{int(rgb[2]*255):02x}'
+                rgb = np.array(color)
+                return f'#{int(rgb[0]*255):02x}{int(rgb[1]*255):02x}{int(rgb[2]*255):02x}'
     except Exception:
         pass
     return "lightgray"
