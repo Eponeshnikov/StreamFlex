@@ -642,6 +642,11 @@ def render_sionna_scene_plotly(
     building_opacity=0.5,
     selected_tx_names=None,
     selected_rx_names=None,
+    global_path_opacity=None,
+    specular_opacity=None,
+    diffuse_opacity=None,
+    refraction_opacity=None,
+    diffraction_opacity=None,
 ):
     """
     Render a Sionna scene using Plotly in Streamlit.
@@ -744,6 +749,11 @@ def render_sionna_scene_plotly(
             show_legend,
             selected_tx_names,
             selected_rx_names,
+            global_path_opacity,
+            specular_opacity,
+            diffuse_opacity,
+            refraction_opacity,
+            diffraction_opacity,
         )
 
     fig.update_layout(
@@ -772,6 +782,11 @@ def add_paths_to_figure(
     show_legend,
     selected_tx_names=None,
     selected_rx_names=None,
+    global_path_opacity=None,
+    specular_opacity=None,
+    diffuse_opacity=None,
+    refraction_opacity=None,
+    diffraction_opacity=None,
 ):
     """
     Add propagation paths to the Plotly figure.
@@ -951,6 +966,20 @@ def add_paths_to_figure(
                             if show_in_legend:
                                 added_to_legend.add(path_type)
 
+                            # Determine opacity based on path type and global opacity
+                            path_opacity = global_path_opacity  # Default to global opacity
+                            if path_type == "specular":
+                                path_opacity = global_path_opacity if global_path_opacity else specular_opacity if specular_opacity else 1.0
+                            elif path_type == "diffuse":
+                                path_opacity = global_path_opacity  if global_path_opacity else diffuse_opacity if diffuse_opacity else 1.0
+                            elif path_type == "refraction":
+                                path_opacity = global_path_opacity  if global_path_opacity else refraction_opacity if refraction_opacity else 1.0
+                            elif path_type == "diffraction":
+                                path_opacity = global_path_opacity  if global_path_opacity else diffraction_opacity if diffraction_opacity else 1.0
+                            elif path_type == "los":
+                                path_opacity = 1.0
+                            # Note: LOS paths use global opacity only, as requested (excluded from individual controls)
+
                             fig.add_trace(
                                 go.Scatter3d(
                                     x=path_x,
@@ -958,6 +987,7 @@ def add_paths_to_figure(
                                     z=path_z,
                                     mode="lines",
                                     line=dict(color=color, width=width),
+                                    opacity=path_opacity,
                                     name=path_type.replace("_", " ").title(),
                                     showlegend=show_in_legend,
                                     legendgroup=f"paths_{path_type}",
