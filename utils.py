@@ -912,7 +912,7 @@ def add_paths_to_figure(
                                     break
 
                             color = path_colors.get(path_type, "gray")
-                            width = path_widths.get(path_type, 2)
+                            width = path_widths.get(path_type, 1)
 
                             # --- FIX: Calculate flat index using GEOMETRIC counts ---
                             # This correctly maps the path back to its physical antenna position,
