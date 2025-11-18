@@ -616,28 +616,32 @@ def cache_result(reset=False):
     return decorator
 
 
-
-
 def get_object_color(obj):
     """
     Extract color/texture information from a scene object.
     Returns RGB color as hex string.
     """
     try:
-        if hasattr(obj, 'radio_material') and obj.radio_material is not None:
+        if hasattr(obj, "radio_material") and obj.radio_material is not None:
             mat = obj.radio_material
-            if hasattr(mat, 'color'):
+            if hasattr(mat, "color"):
                 color = mat.color
                 rgb = np.array(color)
-                return f'#{int(rgb[0]*255):02x}{int(rgb[1]*255):02x}{int(rgb[2]*255):02x}'
+                return f"#{int(rgb[0] * 255):02x}{int(rgb[1] * 255):02x}{int(rgb[2] * 255):02x}"
     except Exception:
         pass
     return "lightgray"
 
 
 def render_sionna_scene_plotly(
-    scene, paths=None, show_paths=True, show_legend=True, show_objects=True, building_opacity=0.5,
-    selected_tx_names=None, selected_rx_names=None
+    scene,
+    paths=None,
+    show_paths=True,
+    show_legend=True,
+    show_objects=True,
+    building_opacity=0.5,
+    selected_tx_names=None,
+    selected_rx_names=None,
 ):
     """
     Render a Sionna scene using Plotly in Streamlit.
@@ -659,7 +663,7 @@ def render_sionna_scene_plotly(
                 mesh = obj.mi_mesh
                 vertices = mesh.vertex_positions_buffer().numpy()
                 faces = mesh.faces_buffer().numpy()
-                
+
                 x, y, z = vertices[0::3], vertices[1::3], vertices[2::3]
                 i, j, k = faces[0::3], faces[1::3], faces[2::3]
 
@@ -667,9 +671,17 @@ def render_sionna_scene_plotly(
 
                 fig.add_trace(
                     go.Mesh3d(
-                        x=x, y=y, z=z, i=i, j=j, k=k,
-                        opacity=building_opacity, color=obj_color, name=obj_name,
-                        showlegend=False, hoverinfo="name"
+                        x=x,
+                        y=y,
+                        z=z,
+                        i=i,
+                        j=j,
+                        k=k,
+                        opacity=building_opacity,
+                        color=obj_color,
+                        name=obj_name,
+                        showlegend=False,
+                        hoverinfo="name",
                     )
                 )
             except Exception:
@@ -678,39 +690,69 @@ def render_sionna_scene_plotly(
     # Only render selected transmitters
     for tx_name, tx in scene.transmitters.items():
         # If selected_tx_names is None or empty, render all TX
-        if selected_tx_names is None or len(selected_tx_names) == 0 or tx_name in selected_tx_names:
+        if (
+            selected_tx_names is None
+            or len(selected_tx_names) == 0
+            or tx_name in selected_tx_names
+        ):
             pos = tx.position.numpy()
             fig.add_trace(
                 go.Scatter3d(
-                    x=[float(pos[0])], y=[float(pos[1])], z=[float(pos[2])],
-                    mode="markers", marker=dict(size=8, color="red", symbol="circle"),
-                    name=f"TX: {tx_name}", showlegend=show_legend,
-                    legendgroup="transmitters", legendgrouptitle_text="Transmitters"
+                    x=[float(pos[0])],
+                    y=[float(pos[1])],
+                    z=[float(pos[2])],
+                    mode="markers",
+                    marker=dict(size=8, color="red", symbol="circle"),
+                    name=f"TX: {tx_name}",
+                    showlegend=show_legend,
+                    legendgroup="transmitters",
+                    legendgrouptitle_text="Transmitters",
                 )
             )
 
     # Only render selected receivers
     for rx_name, rx in scene.receivers.items():
         # If selected_rx_names is None or empty, render all RX
-        if selected_rx_names is None or len(selected_rx_names) == 0 or rx_name in selected_rx_names:
+        if (
+            selected_rx_names is None
+            or len(selected_rx_names) == 0
+            or rx_name in selected_rx_names
+        ):
             pos = rx.position.numpy()
             fig.add_trace(
                 go.Scatter3d(
-                    x=[float(pos[0])], y=[float(pos[1])], z=[float(pos[2])],
-                    mode="markers", marker=dict(size=8, color="green", symbol="circle"),
-                    name=f"RX: {rx_name}", showlegend=show_legend,
-                    legendgroup="receivers", legendgrouptitle_text="Receivers"
+                    x=[float(pos[0])],
+                    y=[float(pos[1])],
+                    z=[float(pos[2])],
+                    mode="markers",
+                    marker=dict(size=8, color="green", symbol="circle"),
+                    name=f"RX: {rx_name}",
+                    showlegend=show_legend,
+                    legendgroup="receivers",
+                    legendgrouptitle_text="Receivers",
                 )
             )
 
     if show_paths and paths is not None:
         # --- CHANGE: Pass the scene object to the path rendering function ---
-        add_paths_to_figure(fig, scene, paths, path_colors, path_widths, show_legend, selected_tx_names, selected_rx_names)
+        add_paths_to_figure(
+            fig,
+            scene,
+            paths,
+            path_colors,
+            path_widths,
+            show_legend,
+            selected_tx_names,
+            selected_rx_names,
+        )
 
     fig.update_layout(
         scene=dict(
-            xaxis_title="X (m)", yaxis_title="Y (m)", zaxis_title="Z (m)",
-            aspectmode="data", camera=dict(eye=dict(x=1.5, y=1.5, z=1.5))
+            xaxis_title="X (m)",
+            yaxis_title="Y (m)",
+            zaxis_title="Z (m)",
+            aspectmode="data",
+            camera=dict(eye=dict(x=1.5, y=1.5, z=1.5)),
         ),
         title="Sionna Scene Visualization",
         showlegend=show_legend,
@@ -721,7 +763,16 @@ def render_sionna_scene_plotly(
     return fig
 
 
-def add_paths_to_figure(fig, scene, paths, path_colors, path_widths, show_legend, selected_tx_names=None, selected_rx_names=None):
+def add_paths_to_figure(
+    fig,
+    scene,
+    paths,
+    path_colors,
+    path_widths,
+    show_legend,
+    selected_tx_names=None,
+    selected_rx_names=None,
+):
     """
     Add propagation paths to the Plotly figure.
     """
@@ -732,14 +783,24 @@ def add_paths_to_figure(fig, scene, paths, path_colors, path_widths, show_legend
         interactions_np = paths.interactions.numpy()
         valid_np = paths.valid.numpy()
 
-        source_positions_np = np.stack([
-            paths.sources.x.numpy(), paths.sources.y.numpy(), paths.sources.z.numpy()
-        ], axis=1)
+        source_positions_np = np.stack(
+            [
+                paths.sources.x.numpy(),
+                paths.sources.y.numpy(),
+                paths.sources.z.numpy(),
+            ],
+            axis=1,
+        )
 
-        target_positions_np = np.stack([
-            paths.targets.x.numpy(), paths.targets.y.numpy(), paths.targets.z.numpy()
-        ], axis=1)
-        
+        target_positions_np = np.stack(
+            [
+                paths.targets.x.numpy(),
+                paths.targets.y.numpy(),
+                paths.targets.z.numpy(),
+            ],
+            axis=1,
+        )
+
         # --- FIX: Get geometric antenna counts from the scene ---
         # This is the number of physical antenna elements per device.
         num_ant_per_tx = scene.tx_array.array_size
@@ -752,22 +813,46 @@ def add_paths_to_figure(fig, scene, paths, path_colors, path_widths, show_legend
             num_rx_ant_paths, num_tx_ant_paths = 1, 1
         else:
             # These dimensions might include polarization, so we name them _paths
-            max_depth, num_rx, num_rx_ant_paths, num_tx, num_tx_ant_paths, num_paths, _ = vertices_np.shape
+            (
+                max_depth,
+                num_rx,
+                num_rx_ant_paths,
+                num_tx,
+                num_tx_ant_paths,
+                num_paths,
+                _,
+            ) = vertices_np.shape
 
         for rx_idx in range(num_rx):
             for tx_idx in range(num_tx):
                 # Get the actual TX and RX names to check if they're selected
-                tx_name = list(scene.transmitters.keys())[tx_idx] if tx_idx < len(scene.transmitters) else f"tx{tx_idx}"
-                rx_name = list(scene.receivers.keys())[rx_idx] if rx_idx < len(scene.receivers) else f"rx{rx_idx}"
-                
+                tx_name = (
+                    list(scene.transmitters.keys())[tx_idx]
+                    if tx_idx < len(scene.transmitters)
+                    else f"tx{tx_idx}"
+                )
+                rx_name = (
+                    list(scene.receivers.keys())[rx_idx]
+                    if rx_idx < len(scene.receivers)
+                    else f"rx{rx_idx}"
+                )
+
                 # Check if both TX and RX are selected (or if no selection is made)
-                tx_selected = selected_tx_names is None or len(selected_tx_names) == 0 or tx_name in selected_tx_names
-                rx_selected = selected_rx_names is None or len(selected_rx_names) == 0 or rx_name in selected_rx_names
-                
+                tx_selected = (
+                    selected_tx_names is None
+                    or len(selected_tx_names) == 0
+                    or tx_name in selected_tx_names
+                )
+                rx_selected = (
+                    selected_rx_names is None
+                    or len(selected_rx_names) == 0
+                    or rx_name in selected_rx_names
+                )
+
                 # Skip if either TX or RX is not selected
                 if not tx_selected or not rx_selected:
                     continue
-                
+
                 # Loop over the antenna dimension from the paths tensor
                 for rx_ant_idx in range(num_rx_ant_paths):
                     for tx_ant_idx in range(num_tx_ant_paths):
@@ -775,7 +860,13 @@ def add_paths_to_figure(fig, scene, paths, path_colors, path_widths, show_legend
                             if is_synthetic:
                                 is_valid = valid_np[rx_idx, tx_idx, path_idx]
                             else:
-                                is_valid = valid_np[rx_idx, rx_ant_idx, tx_idx, tx_ant_idx, path_idx]
+                                is_valid = valid_np[
+                                    rx_idx,
+                                    rx_ant_idx,
+                                    tx_idx,
+                                    tx_ant_idx,
+                                    path_idx,
+                                ]
 
                             if not is_valid:
                                 continue
@@ -783,52 +874,94 @@ def add_paths_to_figure(fig, scene, paths, path_colors, path_widths, show_legend
                             path_type = "los"
                             for depth_idx in range(max_depth):
                                 if is_synthetic:
-                                    interaction_type = int(interactions_np[depth_idx, rx_idx, tx_idx, path_idx])
+                                    interaction_type = int(
+                                        interactions_np[
+                                            depth_idx, rx_idx, tx_idx, path_idx
+                                        ]
+                                    )
                                 else:
-                                    interaction_type = int(interactions_np[depth_idx, rx_idx, rx_ant_idx, tx_idx, tx_ant_idx, path_idx])
+                                    interaction_type = int(
+                                        interactions_np[
+                                            depth_idx,
+                                            rx_idx,
+                                            rx_ant_idx,
+                                            tx_idx,
+                                            tx_ant_idx,
+                                            path_idx,
+                                        ]
+                                    )
                                 if interaction_type != 0:
-                                    path_type = get_path_type_name(interaction_type)
+                                    path_type = get_path_type_name(
+                                        interaction_type
+                                    )
                                     break
-                            
+
                             color = path_colors.get(path_type, "gray")
                             width = path_widths.get(path_type, 2)
 
                             # --- FIX: Calculate flat index using GEOMETRIC counts ---
                             # This correctly maps the path back to its physical antenna position,
                             # even if the paths tensor has extra dimensions for polarization.
-                            flat_tx_ant_idx = tx_idx * num_ant_per_tx + (tx_ant_idx % num_ant_per_tx)
+                            flat_tx_ant_idx = tx_idx * num_ant_per_tx + (
+                                tx_ant_idx % num_ant_per_tx
+                            )
                             source_pos = source_positions_np[flat_tx_ant_idx]
-                            
+
                             path_coords = [source_pos]
 
                             for depth_idx in range(max_depth):
                                 if is_synthetic:
-                                    vertex = vertices_np[depth_idx, rx_idx, tx_idx, path_idx]
+                                    vertex = vertices_np[
+                                        depth_idx, rx_idx, tx_idx, path_idx
+                                    ]
                                 else:
-                                    vertex = vertices_np[depth_idx, rx_idx, rx_ant_idx, tx_idx, tx_ant_idx, path_idx]
+                                    vertex = vertices_np[
+                                        depth_idx,
+                                        rx_idx,
+                                        rx_ant_idx,
+                                        tx_idx,
+                                        tx_ant_idx,
+                                        path_idx,
+                                    ]
                                 if np.any(vertex != 0):
                                     path_coords.append(vertex)
 
                             # --- FIX: Calculate flat index using GEOMETRIC counts ---
-                            flat_rx_ant_idx = rx_idx * num_ant_per_rx + (rx_ant_idx % num_ant_per_rx)
+                            flat_rx_ant_idx = rx_idx * num_ant_per_rx + (
+                                rx_ant_idx % num_ant_per_rx
+                            )
                             target_pos = target_positions_np[flat_rx_ant_idx]
                             path_coords.append(target_pos)
 
-                            path_x, path_y, path_z = zip(*[p.tolist() for p in path_coords])
-                            if len(path_x) > 2:  # Has intermediate vertices beyond the TX position
-                                path_x, path_y, path_z = path_x[:-2] + (path_x[-1],), path_y[:-2] + (path_y[-1],), path_z[:-2] + (path_z[-1],)
+                            path_x, path_y, path_z = zip(
+                                *[p.tolist() for p in path_coords]
+                            )
+                            if (
+                                len(path_x) > 2
+                            ):  # Has intermediate vertices beyond the TX position
+                                path_x, path_y, path_z = (
+                                    path_x[:-2] + (path_x[-1],),
+                                    path_y[:-2] + (path_y[-1],),
+                                    path_z[:-2] + (path_z[-1],),
+                                )
 
-                            show_in_legend = show_legend and (path_type not in added_to_legend)
+                            show_in_legend = show_legend and (
+                                path_type not in added_to_legend
+                            )
                             if show_in_legend:
                                 added_to_legend.add(path_type)
 
                             fig.add_trace(
                                 go.Scatter3d(
-                                    x=path_x, y=path_y, z=path_z,
-                                    mode="lines", line=dict(color=color, width=width),
+                                    x=path_x,
+                                    y=path_y,
+                                    z=path_z,
+                                    mode="lines",
+                                    line=dict(color=color, width=width),
                                     name=path_type.replace("_", " ").title(),
                                     showlegend=show_in_legend,
-                                    legendgroup=f"paths_{path_type}", hoverinfo="name"
+                                    legendgroup=f"paths_{path_type}",
+                                    hoverinfo="name",
                                 )
                             )
     except Exception as e:
