@@ -15,6 +15,12 @@ import plotly.graph_objects as go
 import streamlit as st
 from loguru import logger
 import traceback
+from sionna.rt import (
+    PlanarRadioMap,
+    MeshRadioMap,
+)  # Import Sionna classes needed for type checking and functionality
+import drjit as dr
+
 
 # --- UTILITY FUNCTIONS ---
 
@@ -633,6 +639,204 @@ def get_object_color(obj):
     return "lightgray"
 
 
+def radio_map_to_numpy(radio_map, metric, tx_idx, db_scale):
+    """
+    Convert radiomap data to numpy array with proper scaling
+
+    :param radio_map: RadioMap instance
+    :param metric: Metric to extract ('path_gain', 'rss', 'sinr')
+    :param tx_idx: Transmitter index (None for max over all TXs)
+    :param db_scale: Whether to convert to dB scale
+    :return: numpy array of radiomap values
+    """
+    if metric == "path_gain":
+        data = radio_map.path_gain
+    elif metric == "rss":
+        data = radio_map.rss
+    elif metric == "sinr":
+        data = radio_map.sinr
+    else:
+        raise ValueError(f"Unknown metric: {metric}")
+
+    if tx_idx is not None:
+        data = data[tx_idx]
+    else:
+        data = dr.max(data, axis=0)
+
+    data_np = data.numpy()
+
+    if db_scale:
+        with np.errstate(divide="ignore"):  # Ignore log10 of zero
+            if metric == "rss":
+                # Convert W to dBm
+                data_np = 10 * np.log10(data_np * 1000)
+            else:
+                # Convert linear to dB
+                data_np = 10 * np.log10(data_np)
+
+    return data_np
+
+
+def add_planar_radiomap_to_figure(
+    fig,
+    radio_map,
+    metric="path_gain",
+    tx_idx=None,
+    db_scale=True,
+    vmin=None,
+    vmax=None,
+    colorscale="Viridis",
+    show_colorbar=True,
+    opacity=0.8,
+):
+    """
+    Add a planar radiomap to a Plotly figure.
+    This version fixes the 'Not enough cell centers' error by reconstructing the grid.
+    """
+    if not isinstance(radio_map, PlanarRadioMap):
+        raise ValueError("This function only works with PlanarRadioMap")
+
+    data_np = radio_map_to_numpy(radio_map, metric, tx_idx, db_scale)
+    num_cells_y, num_cells_x = data_np.shape
+
+    # FIX: Reconstruct the grid from the measurement surface's bounding box.
+    # This is more reliable than using radio_map.cell_centers directly.
+    # Correctly call .center() as a method.
+    try:
+        bbox = radio_map.measurement_surface.bbox()
+        x_coords = np.linspace(bbox.min.x, bbox.max.x, num_cells_x)
+        y_coords = np.linspace(bbox.min.y, bbox.max.y, num_cells_y)
+        x, y = np.meshgrid(x_coords, y_coords)
+        z_val = bbox.center().z  # Call center() as a method
+        z = np.full_like(x, z_val)
+    except Exception as e:
+        st.error(f"Could not reconstruct radiomap grid from bbox: {e}")
+        return  # Exit if grid cannot be created
+
+    # Set colorscale limits, ignoring non-finite values
+    finite_data = data_np[np.isfinite(data_np)]
+    if vmin is None:
+        vmin = np.min(finite_data) if finite_data.size > 0 else 0
+    if vmax is None:
+        vmax = np.max(finite_data) if finite_data.size > 0 else 1
+
+    if db_scale:
+        colorbar_title = (
+            f"{metric.upper()} [dBm]"
+            if metric == "rss"
+            else f"{metric.upper()} [dB]"
+        )
+    else:
+        colorbar_title = metric.upper()
+
+    fig.add_trace(
+        go.Surface(
+            x=x,
+            y=y,
+            z=z,
+            surfacecolor=data_np,
+            cmin=vmin,
+            cmax=vmax,
+            colorscale=colorscale,
+            opacity=opacity,
+            showscale=show_colorbar,
+            name=f"RadioMap ({metric})",
+            hovertemplate=(
+                f"{metric}: %{{surfacecolor:.2f}}<br>"
+                "X: %{x:.2f}m<br>Y: %{y:.2f}m<br>Z: %{z:.2f}m<br>"
+                "<extra></extra>"
+            ),
+            colorbar=dict(title=colorbar_title, x=1.02)
+            if show_colorbar
+            else None,
+        )
+    )
+
+
+def add_mesh_radiomap_to_figure(
+    fig,
+    radio_map,
+    metric="path_gain",
+    tx_idx=None,
+    db_scale=True,
+    vmin=None,
+    vmax=None,
+    colorscale="Viridis",
+    show_colorbar=True,
+    opacity=0.8,
+):
+    """
+    Add a mesh-based radiomap to a Plotly figure
+    """
+    if not isinstance(radio_map, MeshRadioMap):
+        raise ValueError("This function only works with MeshRadioMap")
+
+    data_np = radio_map_to_numpy(radio_map, metric, tx_idx, db_scale)
+    mesh = radio_map.measurement_surface
+    vertices = mesh.vertex_positions_buffer().numpy()
+    faces = mesh.faces_buffer().numpy()
+
+    x, y, z = vertices[0::3], vertices[1::3], vertices[2::3]
+    i, j, k = faces[0::3], faces[1::3], faces[2::3]
+
+    finite_data = data_np[np.isfinite(data_np)]
+    if vmin is None:
+        vmin = np.min(finite_data) if finite_data.size > 0 else 0
+    if vmax is None:
+        vmax = np.max(finite_data) if finite_data.size > 0 else 1
+
+    if db_scale:
+        colorbar_title = (
+            f"{metric.upper()} [dBm]"
+            if metric == "rss"
+            else f"{metric.upper()} [dB]"
+        )
+    else:
+        colorbar_title = metric.upper()
+
+    num_vertices = len(x)
+    vertex_values = np.zeros(num_vertices)
+    vertex_counts = np.zeros(num_vertices)
+
+    for face_idx in range(len(i)):
+        for vertex_idx in [i[face_idx], j[face_idx], k[face_idx]]:
+            vertex_values[vertex_idx] += data_np[face_idx]
+            vertex_counts[vertex_idx] += 1
+
+    vertex_values = np.divide(
+        vertex_values,
+        vertex_counts,
+        out=np.full_like(vertex_values, np.nan),
+        where=vertex_counts > 0,
+    )
+
+    fig.add_trace(
+        go.Mesh3d(
+            x=x,
+            y=y,
+            z=z,
+            i=i,
+            j=j,
+            k=k,
+            intensity=vertex_values,
+            cmin=vmin,
+            cmax=vmax,
+            colorscale=colorscale,
+            opacity=opacity,
+            showscale=show_colorbar,
+            name=f"RadioMap ({metric})",
+            hovertemplate=(
+                f"{metric}: %{{intensity:.2f}}<br>"
+                "X: %{x:.2f}m<br>Y: %{y:.2f}m<br>Z: %{z:.2f}m<br>"
+                "<extra></extra>"
+            ),
+            colorbar=dict(title=colorbar_title, x=1.02)
+            if show_colorbar
+            else None,
+        )
+    )
+
+
 def render_sionna_scene_plotly(
     scene,
     paths=None,
@@ -647,6 +851,15 @@ def render_sionna_scene_plotly(
     diffuse_opacity=None,
     refraction_opacity=None,
     diffraction_opacity=None,
+    radio_map=None,
+    rm_metric="path_gain",
+    rm_tx=None,
+    rm_db_scale=True,
+    rm_vmin=None,
+    rm_vmax=None,
+    rm_colorscale="Viridis",
+    rm_show_colorbar=True,
+    rm_opacity=0.8,
 ):
     """
     Render a Sionna scene using Plotly in Streamlit.
@@ -668,12 +881,9 @@ def render_sionna_scene_plotly(
                 mesh = obj.mi_mesh
                 vertices = mesh.vertex_positions_buffer().numpy()
                 faces = mesh.faces_buffer().numpy()
-
                 x, y, z = vertices[0::3], vertices[1::3], vertices[2::3]
                 i, j, k = faces[0::3], faces[1::3], faces[2::3]
-
                 obj_color = get_object_color(obj)
-
                 fig.add_trace(
                     go.Mesh3d(
                         x=x,
@@ -692,14 +902,42 @@ def render_sionna_scene_plotly(
             except Exception:
                 pass
 
-    # Only render selected transmitters
-    for tx_name, tx in scene.transmitters.items():
-        # If selected_tx_names is None or empty, render all TX
-        if (
-            selected_tx_names is None
-            or len(selected_tx_names) == 0
-            or tx_name in selected_tx_names
-        ):
+    if radio_map is not None:
+        try:
+            if isinstance(radio_map, PlanarRadioMap):
+                add_planar_radiomap_to_figure(
+                    fig,
+                    radio_map,
+                    rm_metric,
+                    rm_tx,
+                    rm_db_scale,
+                    rm_vmin,
+                    rm_vmax,
+                    rm_colorscale,
+                    rm_show_colorbar,
+                    rm_opacity,
+                )
+            elif isinstance(radio_map, MeshRadioMap):
+                add_mesh_radiomap_to_figure(
+                    fig,
+                    radio_map,
+                    rm_metric,
+                    rm_tx,
+                    rm_db_scale,
+                    rm_vmin,
+                    rm_vmax,
+                    rm_colorscale,
+                    rm_show_colorbar,
+                    rm_opacity,
+                )
+        except Exception as e:
+            st.error(f"Error rendering radiomap: {str(e)}")
+            st.code(traceback.format_exc())
+
+    tx_names_to_render = selected_tx_names or list(scene.transmitters.keys())
+    for tx_name in tx_names_to_render:
+        if tx_name in scene.transmitters:
+            tx = scene.transmitters[tx_name]
             pos = tx.position.numpy()
             fig.add_trace(
                 go.Scatter3d(
@@ -715,14 +953,10 @@ def render_sionna_scene_plotly(
                 )
             )
 
-    # Only render selected receivers
-    for rx_name, rx in scene.receivers.items():
-        # If selected_rx_names is None or empty, render all RX
-        if (
-            selected_rx_names is None
-            or len(selected_rx_names) == 0
-            or rx_name in selected_rx_names
-        ):
+    rx_names_to_render = selected_rx_names or list(scene.receivers.keys())
+    for rx_name in rx_names_to_render:
+        if rx_name in scene.receivers:
+            rx = scene.receivers[rx_name]
             pos = rx.position.numpy()
             fig.add_trace(
                 go.Scatter3d(
@@ -739,7 +973,6 @@ def render_sionna_scene_plotly(
             )
 
     if show_paths and paths is not None:
-        # --- CHANGE: Pass the scene object to the path rendering function ---
         add_paths_to_figure(
             fig,
             scene,
@@ -797,203 +1030,113 @@ def add_paths_to_figure(
         vertices_np = paths.vertices.numpy()
         interactions_np = paths.interactions.numpy()
         valid_np = paths.valid.numpy()
-
         source_positions_np = np.stack(
-            [
-                paths.sources.x.numpy(),
-                paths.sources.y.numpy(),
-                paths.sources.z.numpy(),
-            ],
-            axis=1,
+            [p.numpy() for p in paths.sources], axis=1
         )
-
         target_positions_np = np.stack(
-            [
-                paths.targets.x.numpy(),
-                paths.targets.y.numpy(),
-                paths.targets.z.numpy(),
-            ],
-            axis=1,
+            [p.numpy() for p in paths.targets], axis=1
         )
-
-        # --- FIX: Get geometric antenna counts from the scene ---
-        # This is the number of physical antenna elements per device.
-        num_ant_per_tx = scene.tx_array.array_size
-        num_ant_per_rx = scene.rx_array.array_size
 
         is_synthetic = paths.synthetic_array
 
         if is_synthetic:
             max_depth, num_rx, num_tx, num_paths, _ = vertices_np.shape
-            num_rx_ant_paths, num_tx_ant_paths = 1, 1
         else:
-            # These dimensions might include polarization, so we name them _paths
-            (
-                max_depth,
-                num_rx,
-                num_rx_ant_paths,
-                num_tx,
-                num_tx_ant_paths,
-                num_paths,
-                _,
-            ) = vertices_np.shape
+            (max_depth, num_rx, _, num_tx, _, num_paths, _) = vertices_np.shape
 
         for rx_idx in range(num_rx):
             for tx_idx in range(num_tx):
-                # Get the actual TX and RX names to check if they're selected
-                tx_name = (
-                    list(scene.transmitters.keys())[tx_idx]
-                    if tx_idx < len(scene.transmitters)
-                    else f"tx{tx_idx}"
-                )
-                rx_name = (
-                    list(scene.receivers.keys())[rx_idx]
-                    if rx_idx < len(scene.receivers)
-                    else f"rx{rx_idx}"
-                )
+                tx_name = list(scene.transmitters.keys())[tx_idx]
+                rx_name = list(scene.receivers.keys())[rx_idx]
 
-                # Check if both TX and RX are selected (or if no selection is made)
-                tx_selected = (
-                    selected_tx_names is None
-                    or len(selected_tx_names) == 0
-                    or tx_name in selected_tx_names
-                )
-                rx_selected = (
-                    selected_rx_names is None
-                    or len(selected_rx_names) == 0
-                    or rx_name in selected_rx_names
-                )
-
-                # Skip if either TX or RX is not selected
-                if not tx_selected or not rx_selected:
+                if (
+                    selected_tx_names and tx_name not in selected_tx_names
+                ) or (selected_rx_names and rx_name not in selected_rx_names):
                     continue
 
-                # Loop over the antenna dimension from the paths tensor
-                for rx_ant_idx in range(num_rx_ant_paths):
-                    for tx_ant_idx in range(num_tx_ant_paths):
-                        for path_idx in range(num_paths):
-                            if is_synthetic:
-                                is_valid = valid_np[rx_idx, tx_idx, path_idx]
-                            else:
-                                is_valid = valid_np[
-                                    rx_idx,
-                                    rx_ant_idx,
-                                    tx_idx,
-                                    tx_ant_idx,
-                                    path_idx,
-                                ]
+                for path_idx in range(num_paths):
+                    is_valid = (
+                        valid_np[rx_idx, 0, tx_idx, 0, path_idx]
+                        if not is_synthetic
+                        else valid_np[rx_idx, tx_idx, path_idx]
+                    )
+                    if not is_valid:
+                        continue
 
-                            if not is_valid:
-                                continue
+                    path_type = "los"
+                    for depth in range(max_depth):
+                        interaction = int(
+                            interactions_np[
+                                depth, rx_idx, 0, tx_idx, 0, path_idx
+                            ]
+                            if not is_synthetic
+                            else interactions_np[
+                                depth, rx_idx, tx_idx, path_idx
+                            ]
+                        )
+                        if interaction != 0:
+                            path_type = get_path_type_name(interaction)
+                            break
 
-                            path_type = "los"
-                            for depth_idx in range(max_depth):
-                                if is_synthetic:
-                                    interaction_type = int(
-                                        interactions_np[
-                                            depth_idx, rx_idx, tx_idx, path_idx
-                                        ]
-                                    )
-                                else:
-                                    interaction_type = int(
-                                        interactions_np[
-                                            depth_idx,
-                                            rx_idx,
-                                            rx_ant_idx,
-                                            tx_idx,
-                                            tx_ant_idx,
-                                            path_idx,
-                                        ]
-                                    )
-                                if interaction_type != 0:
-                                    path_type = get_path_type_name(
-                                        interaction_type
-                                    )
-                                    break
+                    color = path_colors.get(path_type, "gray")
+                    width = path_widths.get(path_type, 1)
 
-                            color = path_colors.get(path_type, "gray")
-                            width = path_widths.get(path_type, 1)
+                    source_pos = source_positions_np[
+                        tx_idx * scene.tx_array.array_size
+                    ]
+                    target_pos = target_positions_np[
+                        rx_idx * scene.rx_array.array_size
+                    ]
 
-                            # --- FIX: Calculate flat index using GEOMETRIC counts ---
-                            # This correctly maps the path back to its physical antenna position,
-                            # even if the paths tensor has extra dimensions for polarization.
-                            flat_tx_ant_idx = tx_idx * num_ant_per_tx + (
-                                tx_ant_idx % num_ant_per_tx
-                            )
-                            source_pos = source_positions_np[flat_tx_ant_idx]
+                    path_coords = [source_pos]
+                    for depth in range(max_depth):
+                        vertex = (
+                            vertices_np[depth, rx_idx, 0, tx_idx, 0, path_idx]
+                            if not is_synthetic
+                            else vertices_np[depth, rx_idx, tx_idx, path_idx]
+                        )
+                        if np.any(vertex != 0):
+                            path_coords.append(vertex)
+                    path_coords.append(target_pos)
 
-                            path_coords = [source_pos]
+                    path_x, path_y, path_z = zip(
+                        *[p.tolist() for p in path_coords]
+                    )
 
-                            for depth_idx in range(max_depth):
-                                if is_synthetic:
-                                    vertex = vertices_np[
-                                        depth_idx, rx_idx, tx_idx, path_idx
-                                    ]
-                                else:
-                                    vertex = vertices_np[
-                                        depth_idx,
-                                        rx_idx,
-                                        rx_ant_idx,
-                                        tx_idx,
-                                        tx_ant_idx,
-                                        path_idx,
-                                    ]
-                                if np.any(vertex != 0):
-                                    path_coords.append(vertex)
+                    show_in_legend = show_legend and (
+                        path_type not in added_to_legend
+                    )
+                    if show_in_legend:
+                        added_to_legend.add(path_type)
 
-                            # --- FIX: Calculate flat index using GEOMETRIC counts ---
-                            flat_rx_ant_idx = rx_idx * num_ant_per_rx + (
-                                rx_ant_idx % num_ant_per_rx
-                            )
-                            target_pos = target_positions_np[flat_rx_ant_idx]
-                            path_coords.append(target_pos)
+                    opacity_map = {
+                        "specular": specular_opacity,
+                        "diffuse": diffuse_opacity,
+                        "refraction": refraction_opacity,
+                        "diffraction": diffraction_opacity,
+                    }
+                    path_opacity = (
+                        global_path_opacity
+                        if global_path_opacity is not None
+                        else opacity_map.get(path_type, 1.0)
+                    )
+                    if path_type == "los":
+                        path_opacity = 1.0
 
-                            path_x, path_y, path_z = zip(
-                                *[p.tolist() for p in path_coords]
-                            )
-                            if (
-                                len(path_x) > 2
-                            ):  # Has intermediate vertices beyond the TX position
-                                path_x, path_y, path_z = (
-                                    path_x[:-2] + (path_x[-1],),
-                                    path_y[:-2] + (path_y[-1],),
-                                    path_z[:-2] + (path_z[-1],),
-                                )
-
-                            show_in_legend = show_legend and (
-                                path_type not in added_to_legend
-                            )
-                            if show_in_legend:
-                                added_to_legend.add(path_type)
-
-                            # Determine opacity based on path type and global opacity
-                            path_opacity = global_path_opacity  # Default to global opacity
-                            if path_type == "specular":
-                                path_opacity = global_path_opacity if global_path_opacity else specular_opacity if specular_opacity else 1.0
-                            elif path_type == "diffuse":
-                                path_opacity = global_path_opacity  if global_path_opacity else diffuse_opacity if diffuse_opacity else 1.0
-                            elif path_type == "refraction":
-                                path_opacity = global_path_opacity  if global_path_opacity else refraction_opacity if refraction_opacity else 1.0
-                            elif path_type == "diffraction":
-                                path_opacity = global_path_opacity  if global_path_opacity else diffraction_opacity if diffraction_opacity else 1.0
-                            elif path_type == "los":
-                                path_opacity = 1.0
-                            # Note: LOS paths use global opacity only, as requested (excluded from individual controls)
-
-                            fig.add_trace(
-                                go.Scatter3d(
-                                    x=path_x,
-                                    y=path_y,
-                                    z=path_z,
-                                    mode="lines",
-                                    line=dict(color=color, width=width),
-                                    opacity=path_opacity,
-                                    name=path_type.replace("_", " ").title(),
-                                    showlegend=show_in_legend,
-                                    legendgroup=f"paths_{path_type}",
-                                    hoverinfo="name",
-                                )
-                            )
+                    fig.add_trace(
+                        go.Scatter3d(
+                            x=path_x,
+                            y=path_y,
+                            z=path_z,
+                            mode="lines",
+                            line=dict(color=color, width=width),
+                            opacity=path_opacity,
+                            name=path_type.replace("_", " ").title(),
+                            showlegend=show_in_legend,
+                            legendgroup=f"paths_{path_type}",
+                            hoverinfo="name",
+                        )
+                    )
     except Exception as e:
         st.error(f"Could not render paths: {str(e)}")
         st.code(traceback.format_exc())
@@ -1003,13 +1146,9 @@ def get_path_type_name(interaction_type):
     """
     Convert interaction type constant to path type name.
     """
-    if interaction_type == 1:
-        return "specular"
-    elif interaction_type == 2:
-        return "diffuse"
-    elif interaction_type == 8:
-        return "diffraction"
-    elif interaction_type == 4:
-        return "refraction"
-    else:
-        return "los"
+    return {
+        1: "specular",
+        2: "diffuse",
+        8: "diffraction",
+        4: "refraction",
+    }.get(interaction_type, "los")
