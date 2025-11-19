@@ -1108,6 +1108,14 @@ def add_paths_to_figure(
                     path_x, path_y, path_z = zip(
                         *[p.tolist() for p in path_coords]
                     )
+                    if (
+                        len(path_x) > 2
+                    ):  # Has intermediate vertices beyond the TX position
+                        path_x, path_y, path_z = (
+                            path_x[:-2] + (path_x[-1],),
+                            path_y[:-2] + (path_y[-1],),
+                            path_z[:-2] + (path_z[-1],),
+                        )
 
                     show_in_legend = show_legend and (
                         path_type not in added_to_legend
