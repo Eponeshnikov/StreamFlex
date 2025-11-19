@@ -728,6 +728,7 @@ def add_planar_radiomap_to_figure(
         )
     else:
         colorbar_title = metric.upper()
+    custom_data_stacked = np.stack([data_np.T], axis=-1)
 
     fig.add_trace(
         go.Surface(
@@ -735,20 +736,25 @@ def add_planar_radiomap_to_figure(
             y=y,
             z=z,
             surfacecolor=data_np,
+            # 2. Pass the stacked custom data
+            customdata=custom_data_stacked,
             cmin=vmin,
             cmax=vmax,
             colorscale=colorscale,
             opacity=opacity,
             showscale=show_colorbar,
             name=f"RadioMap ({metric})",
+            # 3. Access the custom data by index
             hovertemplate=(
-                f"{metric}: %{{surfacecolor:.2f}}<br>"
-                "X: %{x:.2f}m<br>Y: %{y:.2f}m<br>Z: %{z:.2f}m<br>"
-                "<extra></extra>"
+                f"{metric}: "
+                + "%{customdata[0]:.2f}<br>X: %{x:.2f}m<br>Y: %{y:.2f}m<br>Z: %{z:.2f}m<br><extra></extra>"
             ),
             colorbar=dict(title=colorbar_title, x=1.02)
             if show_colorbar
             else None,
+            showlegend=True,
+            legendgroup="Radiomap",
+            hoverinfo="name",
         )
     )
 
