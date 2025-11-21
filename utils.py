@@ -691,7 +691,6 @@ def add_planar_radiomap_to_figure(
 ):
     """
     Add a planar radiomap to a Plotly figure.
-    This version fixes the 'Not enough cell centers' error by reconstructing the grid.
     """
     if not isinstance(radio_map, PlanarRadioMap):
         raise ValueError("This function only works with PlanarRadioMap")
@@ -699,21 +698,17 @@ def add_planar_radiomap_to_figure(
     data_np = radio_map_to_numpy(radio_map, metric, tx_idx, db_scale)
     num_cells_y, num_cells_x = data_np.shape
 
-    # FIX: Reconstruct the grid from the measurement surface's bounding box.
-    # This is more reliable than using radio_map.cell_centers directly.
-    # Correctly call .center() as a method.
     try:
         bbox = radio_map.measurement_surface.bbox()
         x_coords = np.linspace(bbox.min.x, bbox.max.x, num_cells_x)
         y_coords = np.linspace(bbox.min.y, bbox.max.y, num_cells_y)
         x, y = np.meshgrid(x_coords, y_coords)
-        z_val = bbox.center().z  # Call center() as a method
+        z_val = bbox.center().z
         z = np.full_like(x, z_val)
     except Exception as e:
         st.error(f"Could not reconstruct radiomap grid from bbox: {e}")
-        return  # Exit if grid cannot be created
+        return
 
-    # Set colorscale limits, ignoring non-finite values
     finite_data = data_np[np.isfinite(data_np)]
     if vmin is None:
         vmin = np.min(finite_data) if finite_data.size > 0 else 0
@@ -736,7 +731,6 @@ def add_planar_radiomap_to_figure(
             y=y,
             z=z,
             surfacecolor=data_np,
-            # 2. Pass the stacked custom data
             customdata=custom_data_stacked,
             cmin=vmin,
             cmax=vmax,
@@ -744,7 +738,6 @@ def add_planar_radiomap_to_figure(
             opacity=opacity,
             showscale=show_colorbar,
             name=f"RadioMap ({metric})",
-            # 3. Access the custom data by index
             hovertemplate=(
                 f"{metric}: "
                 + "%{customdata[0]:.2f}<br>X: %{x:.2f}m<br>Y: %{y:.2f}m<br>Z: %{z:.2f}m<br><extra></extra>"
@@ -785,6 +778,9 @@ def add_mesh_radiomap_to_figure(
     x, y, z = vertices[0::3], vertices[1::3], vertices[2::3]
     i, j, k = faces[0::3], faces[1::3], faces[2::3]
 
+    # Add slight visual offset to avoid z-fighting with the actual ground object
+    z = z + 0.05
+
     finite_data = data_np[np.isfinite(data_np)]
     if vmin is None:
         vmin = np.min(finite_data) if finite_data.size > 0 else 0
@@ -800,6 +796,7 @@ def add_mesh_radiomap_to_figure(
     else:
         colorbar_title = metric.upper()
 
+    # Map per-triangle data to per-vertex data for smooth shading
     num_vertices = len(x)
     vertex_values = np.zeros(num_vertices)
     vertex_counts = np.zeros(num_vertices)
@@ -839,6 +836,9 @@ def add_mesh_radiomap_to_figure(
             colorbar=dict(title=colorbar_title, x=1.02)
             if show_colorbar
             else None,
+            showlegend=True,
+            legendgroup="Radiomap",
+            hoverinfo="name",
         )
     )
 
