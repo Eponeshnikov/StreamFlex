@@ -111,7 +111,7 @@ class DataManager:
         Returns:
         --------
             dict: A copy of the current shared_data dictionary, containing all key-value
-                  pairs stored in the session state.
+                pairs stored in the session state.
         """
         self.logger.debug("Exporting data state")
         return st.session_state.shared_data.copy()
