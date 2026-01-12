@@ -623,13 +623,13 @@ with st.sidebar:
         c1, c2, c3 = st.columns(3)
         with c1:
             if st.button(
-                "Overwrite", use_container_width=True, type="primary"
+                "Overwrite", width="stretch", type="primary"
             ):
                 _save_config(st.session_state.confirm_overwrite_path)
                 del st.session_state.confirm_overwrite_path
                 st.rerun()
         with c2:
-            if st.button("Save New", use_container_width=True):
+            if st.button("Save New", width="stretch"):
                 base, ext = os.path.splitext(
                     st.session_state.confirm_overwrite_path
                 )
@@ -641,7 +641,7 @@ with st.sidebar:
                 del st.session_state.confirm_overwrite_path
                 st.rerun()
         with c3:
-            if st.button("Cancel", use_container_width=True):
+            if st.button("Cancel", width="stretch"):
                 del st.session_state.confirm_overwrite_path
                 st.rerun()
     else:
@@ -661,7 +661,7 @@ with st.sidebar:
 
     uploaded_file = st.file_uploader("📂 Load Config File", type="json")
     if uploaded_file and st.button(
-        "Apply Loaded Config", use_container_width=True, type="primary"
+        "Apply Loaded Config", width="stretch", type="primary"
     ):
         try:
             loaded_data = json.load(uploaded_file)
@@ -1069,7 +1069,7 @@ with col2:
         }
     st.plotly_chart(
         fig_to_display,
-        use_container_width=True,
+        width="stretch",
         theme=st.session_state.chart_theme_selector,
         config=fig_config,
     )
