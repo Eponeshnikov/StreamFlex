@@ -119,7 +119,7 @@ def render_custom_plotly_chart(
         mime="application/octet-stream",
         key=f"{key}_save_pickle_btn",
         help="Save the current figure as a pickle file",
-        use_container_width=True,
+        width="stretch",
     )
 
     # --- RENDER LOGIC ---

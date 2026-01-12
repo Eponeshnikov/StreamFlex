@@ -351,7 +351,7 @@ def global_trigger():
     if st.button(
         "Execute Global Trigger",
         type="primary",
-        use_container_width=True,
+        width="stretch",
         icon="⚡",
         help="Trigger action across all plugins simultaneously",
         on_click=global_trigger_onclick,
