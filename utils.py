@@ -13,6 +13,7 @@ from typing import Type
 import numpy as np
 import plotly.graph_objects as go
 import streamlit as st
+from streamlit.elements.lib.layout_utils import Width
 from loguru import logger
 import traceback
 from sionna.rt import (
@@ -73,7 +74,7 @@ def load_plot_config(config_name: str) -> dict:
 
 def render_custom_plotly_chart(
     fig: go.Figure,
-    use_container_width: bool = True,
+    width: Width = "stretch",
     key: str | None = None,
 ):
     """
@@ -127,7 +128,7 @@ def render_custom_plotly_chart(
     if not st.session_state[custom_mode_key]:
         st.plotly_chart(
             fig,
-            use_container_width=use_container_width,
+            width=width,
             theme="streamlit",  # Use streamlit's default theme
             key=f"{key}_default_chart",
         )
@@ -145,7 +146,7 @@ def render_custom_plotly_chart(
             st.info(
                 "To use custom styles, please create a theme using a generator app and save it as a .json file in that folder."
             )
-            st.plotly_chart(fig, use_container_width=use_container_width)
+            st.plotly_chart(fig, width=width)
             return
 
         # Create UI for selecting config and chart options
@@ -278,7 +279,7 @@ def render_custom_plotly_chart(
         with st.container(border=st.session_state[show_border_key]):
             st.plotly_chart(
                 fig_to_render,
-                use_container_width=use_container_width,
+                width=width,
                 config=chart_config,
                 theme=chart_theme_param,
                 key=f"{key}_custom_chart",  # Use a unique key for the custom chart
