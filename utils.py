@@ -867,7 +867,7 @@ def render_sionna_scene_plotly(
     rm_colorscale="Viridis",
     rm_show_colorbar=True,
     rm_opacity=0.8,
-):
+) -> go.Figure:
     """
     Render a Sionna scene using Plotly in Streamlit.
     """
