@@ -1050,6 +1050,21 @@ wheels = [
 ]
 
 [[package]]
+name = "infomeasure"
+version = "0.5.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numba" },
+    { name = "numpy" },
+    { name = "scipy" },
+    { name = "sparse" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/30/37/123d28e55816552e87b919985ed21dedea4e9e6c5dd260ed649ff5fff9a8/infomeasure-0.5.1.tar.gz", hash = "sha256:7c52b0743b87cd26ce184e05e96ad80d2cd18ec3418f4be020e6b0f87c5adf3a", size = 168394, upload-time = "2026-01-17T20:53:11.082Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f4/f6/79c0c26adcba6c460422f0a4d2d4a6d6bb53f8bfd3d46405ca435a33b900/infomeasure-0.5.1-py3-none-any.whl", hash = "sha256:1c913e566e717271bc727378573fb27f71855d16db90c75848ab743081e6e4e5", size = 259346, upload-time = "2026-01-17T20:53:09.541Z" },
+]
+
+[[package]]
 name = "ipydatawidgets"
 version = "4.3.5"
 source = { registry = "https://pypi.org/simple" }
@@ -3685,6 +3700,7 @@ dev = [
     { name = "dask-ml" },
     { name = "deltalake" },
     { name = "fastexcel" },
+    { name = "infomeasure" },
     { name = "ipywidgets" },
     { name = "itables" },
     { name = "jupyter" },
@@ -3770,6 +3786,7 @@ dev = [
     { name = "dask-ml", specifier = ">=2025.1.0" },
     { name = "deltalake", specifier = ">=0.25.5" },
     { name = "fastexcel", specifier = ">=0.14.0" },
+    { name = "infomeasure", specifier = ">=0.5.1" },
     { name = "ipywidgets", specifier = ">=8.1.5" },
     { name = "itables", specifier = ">=2.4.4" },
     { name = "jupyter", specifier = ">=1.1.1" },

@@ -31,6 +31,7 @@ dev = [
     "dask-ml>=2025.1.0",
     "deltalake>=0.25.5",
     "fastexcel>=0.14.0",
+    "infomeasure>=0.5.1",
     "ipywidgets>=8.1.5",
     "itables>=2.4.4",
     "jupyter>=1.1.1",
