@@ -101,8 +101,9 @@ class WidgetManager:
             value_state = st.session_state.widget_states.get(
                 plugin_name, {}
             ).get(widget_key, default)
-            is_new_object = widget_key not in st.session_state.current_value.get(
-                plugin_name, {}
+            is_new_object = (
+                widget_key
+                not in st.session_state.current_value.get(plugin_name, {})
             )
             if is_new_object:
                 plugin_current = st.session_state.current_value.get(
@@ -199,6 +200,16 @@ class WidgetManager:
                 raise ValueError("Invalid state format")
 
             st.session_state.widget_states = state.copy()
+            # Clear current_value so widgets re-read from imported widget_states
+            # instead of using stale cached values from the previous session
+            st.session_state.current_value = {}
+            # Clear Streamlit's own widget keys so widgets pick up imported
+            # values instead of using stale session_state entries
+            for plugin_name, plugin_state in state.items():
+                for widget_key in plugin_state:
+                    full_key = f"{plugin_name}_{widget_key}"
+                    if full_key in st.session_state:
+                        del st.session_state[full_key]
             self.logger.success(
                 "Imported widget states: {plugins} plugins, {widgets} widgets",
                 plugins=len(state),
