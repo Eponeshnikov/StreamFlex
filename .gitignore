@@ -173,6 +173,7 @@ analytics
 # Ignore private files in pages directory
 /pages/private_*
 /pages/README.md
+pages/global_analysis
 configs/page_categories.yaml
 pages/.gitignore
 other_docs
