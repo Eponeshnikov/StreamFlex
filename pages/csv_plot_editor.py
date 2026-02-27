@@ -1,24 +1,190 @@
 """
-CSV Plot Editor – load exported sweep CSVs, rename configs, and visualise
+CSV Plot Editor v3.1 – load exported sweep CSVs, rename configs, and visualise
 with multiple chart types via render_custom_plotly_chart.
+
+Pipeline (JSON mode):
+  1. computed_columns   – derive new columns
+  2. filters            – drop non-matching rows
+  3. x.values filter    – keep only requested x-values (no rename yet)
+  4. aggregate          – collapse rows (mean/sum/…) + error bars
+  5. x rename + order   – categorical ordering and display labels
+  6. transform          – normalize stacks, etc.
+  7. group → config     – split into Plotly traces
+  8. auto-dedup         – safety net: aggregate any remaining duplicates
+  9. render             – build Plotly figure
+
+Features:
+  - Multiple JSON spec files (merged)
+  - Save all plots: HTML / PNG / SVG
+  - Aggregation: mean, median, sum, count, min, max, std
+  - Error bars: std, sem, minmax, q25_q75
+  - Computed columns (pd.eval expressions)
+  - Normalize transform for stacked charts
+  - Data table toggle per plot
 """
 
+from __future__ import annotations
+
+import io
+import json
+import zipfile
+from typing import Any
+
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-from streamlit.elements.lib.layout_utils import Width
+
+try:
+    from streamlit.elements.lib.layout_utils import Width
+except ImportError:
+    from typing import Literal
+
+    Width = Literal["stretch"]  # type: ignore[assignment, misc]
 
 try:
     from utils import render_custom_plotly_chart
 except ImportError:
 
-    def render_custom_plotly_chart(fig, width: Width = "stretch", key=None):
-        st.plotly_chart(fig, width=width)
+    def render_custom_plotly_chart(
+        fig: go.Figure, width: Any = "stretch", key: str | None = None
+    ) -> None:
+        st.plotly_chart(fig, use_container_width=(width == "stretch"))
 
 
-# ── Chart type helpers ────────────────────────────────────────────────────────
+# ── Aggregation helpers ──────────────────────────────────────────────────────
 
-CHART_TYPES = [
+_AGG_FUNCS: dict[str, str] = {
+    "mean": "mean",
+    "median": "median",
+    "sum": "sum",
+    "count": "count",
+    "min": "min",
+    "max": "max",
+    "std": "std",
+    "first": "first",
+    "last": "last",
+}
+
+
+def _aggregate_data(
+    df: pd.DataFrame,
+    group_keys: list[str],
+    value_cols: list[str],
+    func: str = "mean",
+    error_bars: str | None = None,
+) -> pd.DataFrame:
+    """Aggregate *df* by *group_keys*, computing *func* on *value_cols*."""
+    agg_func = _AGG_FUNCS.get(func, "mean")
+    existing_keys = [k for k in group_keys if k in df.columns]
+    existing_vals = [v for v in value_cols if v in df.columns]
+    if not existing_keys or not existing_vals:
+        return df
+
+    agg_dict: dict[str, str] = {col: agg_func for col in existing_vals}
+    result: pd.DataFrame = (
+        df.groupby(existing_keys, observed=True).agg(agg_dict).reset_index()
+    )
+
+    if error_bars and error_bars != "none":
+        for col in existing_vals:
+            if error_bars == "std":
+                err = (
+                    df.groupby(existing_keys, observed=True)[col]
+                    .std()
+                    .reset_index()
+                    .rename(columns={col: f"{col}__err"})
+                )
+                result = result.merge(err, on=existing_keys, how="left")
+                result[f"{col}__err"] = result[f"{col}__err"].fillna(0)
+            elif error_bars == "sem":
+                err = (
+                    df.groupby(existing_keys, observed=True)[col]
+                    .sem()
+                    .reset_index()
+                    .rename(columns={col: f"{col}__err"})
+                )
+                result = result.merge(err, on=existing_keys, how="left")
+                result[f"{col}__err"] = result[f"{col}__err"].fillna(0)
+            elif error_bars == "minmax":
+                mn = (
+                    df.groupby(existing_keys, observed=True)[col]
+                    .min()
+                    .reset_index()
+                    .rename(columns={col: f"{col}__err_minus"})
+                )
+                mx = (
+                    df.groupby(existing_keys, observed=True)[col]
+                    .max()
+                    .reset_index()
+                    .rename(columns={col: f"{col}__err_plus"})
+                )
+                result = result.merge(mn, on=existing_keys, how="left")
+                result = result.merge(mx, on=existing_keys, how="left")
+                result[f"{col}__err_minus"] = (
+                    result[col] - result[f"{col}__err_minus"]
+                )
+                result[f"{col}__err_plus"] = (
+                    result[f"{col}__err_plus"] - result[col]
+                )
+            elif error_bars == "q25_q75":
+                q25 = (
+                    df.groupby(existing_keys, observed=True)[col]
+                    .quantile(0.25)
+                    .reset_index()
+                    .rename(columns={col: f"{col}__err_minus"})
+                )
+                q75 = (
+                    df.groupby(existing_keys, observed=True)[col]
+                    .quantile(0.75)
+                    .reset_index()
+                    .rename(columns={col: f"{col}__err_plus"})
+                )
+                result = result.merge(q25, on=existing_keys, how="left")
+                result = result.merge(q75, on=existing_keys, how="left")
+                result[f"{col}__err_minus"] = (
+                    result[col] - result[f"{col}__err_minus"]
+                )
+                result[f"{col}__err_plus"] = (
+                    result[f"{col}__err_plus"] - result[col]
+                )
+    return result
+
+
+def _compute_columns(
+    df: pd.DataFrame, computed: list[dict[str, str]]
+) -> pd.DataFrame:
+    """Add computed columns via ``pd.eval``."""
+    for spec in computed:
+        name = spec.get("name")
+        expr = spec.get("expr")
+        if not name or not expr:
+            continue
+        try:
+            df[name] = df.eval(expr)
+        except Exception as exc:
+            st.warning(f"Computed column `{name}` failed: {exc}")
+    return df
+
+
+def _normalize_stacked(df: pd.DataFrame, y_columns: list[str]) -> pd.DataFrame:
+    """Normalize stacked Y columns so each row sums to 100 %."""
+    existing = [c for c in y_columns if c in df.columns]
+    if not existing:
+        return df
+    df = df.copy()
+    row_sums: pd.Series = df[existing].sum(axis=1)  # type: ignore[assignment]
+    safe_sums: pd.Series = row_sums.where(
+        row_sums.astype(float) != 0.0, other=float("nan")
+    )
+    for c in existing:
+        df[c] = df[c] / safe_sums * 100.0
+    return df
+
+
+# ── Chart builders ───────────────────────────────────────────────────────────
+
+CHART_TYPES: list[str] = [
     "Line",
     "Bar",
     "Grouped Bar",
@@ -27,8 +193,36 @@ CHART_TYPES = [
     "Heatmap",
 ]
 
+_CHART_TYPE_MAP: dict[str, str] = {
+    "line": "Line",
+    "bar": "Bar",
+    "grouped_bar": "Grouped Bar",
+    "stacked_bar": "Stacked Bar",
+    "stacked_area": "Stacked Area",
+    "heatmap": "Heatmap",
+}
 
-def _build_line(fig: go.Figure, df: pd.DataFrame, x_col: str, y_col: str):
+
+def _get_error_arrays(df: pd.DataFrame, y_col: str) -> dict[str, Any] | None:
+    sym_err = f"{y_col}__err"
+    asym_plus = f"{y_col}__err_plus"
+    asym_minus = f"{y_col}__err_minus"
+    if sym_err in df.columns:
+        return dict(type="data", array=df[sym_err].tolist(), visible=True)
+    if asym_plus in df.columns and asym_minus in df.columns:
+        return dict(
+            type="data",
+            symmetric=False,
+            array=df[asym_plus].tolist(),
+            arrayminus=df[asym_minus].tolist(),
+            visible=True,
+        )
+    return None
+
+
+def _build_line(
+    fig: go.Figure, df: pd.DataFrame, x_col: str, y_col: str
+) -> None:
     for cfg in df["config"].unique():
         sub = df[df["config"] == cfg].sort_values(x_col)
         fig.add_trace(
@@ -36,19 +230,23 @@ def _build_line(fig: go.Figure, df: pd.DataFrame, x_col: str, y_col: str):
                 x=sub[x_col],
                 y=sub[y_col],
                 mode="lines+markers",
-                name=cfg,
+                name=str(cfg),
+                error_y=_get_error_arrays(sub, y_col),
             )
         )
 
 
-def _build_bar(fig: go.Figure, df: pd.DataFrame, x_col: str, y_col: str):
+def _build_bar(
+    fig: go.Figure, df: pd.DataFrame, x_col: str, y_col: str
+) -> None:
     for cfg in df["config"].unique():
         sub = df[df["config"] == cfg].sort_values(x_col)
         fig.add_trace(
             go.Bar(
                 x=sub[x_col],
                 y=sub[y_col],
-                name=cfg,
+                name=str(cfg),
+                error_y=_get_error_arrays(sub, y_col),
             )
         )
     fig.update_layout(barmode="overlay")
@@ -56,14 +254,15 @@ def _build_bar(fig: go.Figure, df: pd.DataFrame, x_col: str, y_col: str):
 
 def _build_grouped_bar(
     fig: go.Figure, df: pd.DataFrame, x_col: str, y_col: str
-):
+) -> None:
     for cfg in df["config"].unique():
         sub = df[df["config"] == cfg].sort_values(x_col)
         fig.add_trace(
             go.Bar(
                 x=sub[x_col],
                 y=sub[y_col],
-                name=cfg,
+                name=str(cfg),
+                error_y=_get_error_arrays(sub, y_col),
             )
         )
     fig.update_layout(barmode="group")
@@ -71,22 +270,16 @@ def _build_grouped_bar(
 
 def _build_stacked_bar(
     fig: go.Figure, df: pd.DataFrame, x_col: str, y_col: str
-):
+) -> None:
     for cfg in df["config"].unique():
         sub = df[df["config"] == cfg].sort_values(x_col)
-        fig.add_trace(
-            go.Bar(
-                x=sub[x_col],
-                y=sub[y_col],
-                name=cfg,
-            )
-        )
+        fig.add_trace(go.Bar(x=sub[x_col], y=sub[y_col], name=str(cfg)))
     fig.update_layout(barmode="stack")
 
 
 def _build_stacked_area(
     fig: go.Figure, df: pd.DataFrame, x_col: str, y_col: str
-):
+) -> None:
     for cfg in df["config"].unique():
         sub = df[df["config"] == cfg].sort_values(x_col)
         fig.add_trace(
@@ -95,27 +288,31 @@ def _build_stacked_area(
                 y=sub[y_col],
                 mode="lines",
                 stackgroup="one",
-                name=cfg,
+                name=str(cfg),
             )
         )
 
 
-def _build_heatmap(fig: go.Figure, df: pd.DataFrame, x_col: str, y_col: str):
-    """Pivot configs as rows, x_col values as columns, cell = y_col value."""
+def _build_heatmap(
+    fig: go.Figure, df: pd.DataFrame, x_col: str, y_col: str
+) -> None:
     piv = df.pivot_table(
         index="config", columns=x_col, values=y_col, aggfunc="mean"
     )
+    z_vals = piv.to_numpy()
     fig.add_trace(
         go.Heatmap(
-            z=piv.values,
+            z=z_vals,
             x=[str(c) for c in piv.columns],
-            y=list(piv.index),
+            y=[str(r) for r in piv.index],
             colorscale="Viridis",
+            text=np.round(z_vals, 3),
+            texttemplate="%{text}",
         )
     )
 
 
-_BUILDERS = {
+_BUILDERS: dict[str, Any] = {
     "Line": _build_line,
     "Bar": _build_bar,
     "Grouped Bar": _build_grouped_bar,
@@ -125,63 +322,358 @@ _BUILDERS = {
 }
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# ── X-axis helpers (split into filter vs format) ────────────────────────────
 
 
-def main():
-    st.set_page_config(page_title="CSV Plot Editor", layout="wide")
-    st.title("CSV Plot Editor")
-    st.markdown(
-        "Upload CSV files exported from **Parameter Sweep Analyzer**, "
-        "rename configs, pick a chart type, and render."
-    )
-
-    # ── 1. Upload CSVs ────────────────────────────────────────────────────
-    uploaded_files = st.file_uploader(
-        "Upload one or more sweep-result CSVs",
-        type=["csv"],
-        accept_multiple_files=True,
-    )
-    if not uploaded_files:
-        st.info("Upload at least one CSV to get started.")
-        st.stop()
-
-    # ── 2. Read & combine ─────────────────────────────────────────────────
-    frames: list[pd.DataFrame] = []
-    for uf in uploaded_files:
+def _filter_x_values(df: pd.DataFrame, x_cfg: dict[str, Any]) -> pd.DataFrame:
+    """Step 3: Keep only rows matching x.values.  NO rename, NO categorical."""
+    col: str = x_cfg["column"]
+    if "values" not in x_cfg or not x_cfg["values"]:
+        return df
+    vals = x_cfg["values"]
+    str_vals = [str(v) for v in vals]
+    mask = df[col].astype(str).isin(str_vals)
+    for v in vals:
         try:
-            df = pd.read_csv(uf)
-        except Exception as e:
-            st.error(f"Failed to read **{uf.name}**: {e}")
-            continue
-        if "config" not in df.columns:
-            st.warning(
-                f"**{uf.name}** has no `config` column – adding filename as config."
+            nv = float(v)
+            numeric_col = pd.to_numeric(df[col], errors="coerce")
+            mask = mask | (numeric_col == nv)
+        except (ValueError, TypeError):
+            pass
+    return df[mask].copy()
+
+
+def _format_x_axis(df: pd.DataFrame, x_cfg: dict[str, Any]) -> pd.DataFrame:
+    """Step 5: Apply categorical ordering and rename AFTER aggregation."""
+    col: str = x_cfg["column"]
+    if "values" in x_cfg and x_cfg["values"]:
+        vals = x_cfg["values"]
+        str_vals = [str(v) for v in vals]
+        # Convert to string first to ensure consistency
+        df[col] = df[col].astype(str)
+        df[col] = pd.Categorical(df[col], categories=str_vals, ordered=True)
+    if "rename" in x_cfg and x_cfg["rename"]:
+        rmap: dict[str, str] = x_cfg["rename"]
+        df[col] = df[col].astype(str).map(lambda v, _r=rmap: _r.get(v, v))
+        if "values" in x_cfg and x_cfg["values"]:
+            renamed_cats = [rmap.get(str(v), str(v)) for v in x_cfg["values"]]
+            df[col] = pd.Categorical(
+                df[col], categories=renamed_cats, ordered=True
             )
-            df["config"] = uf.name.removesuffix(".csv")
-        frames.append(df)
+    return df
 
-    if not frames:
-        st.error("No valid CSVs loaded.")
-        st.stop()
 
-    combined = pd.concat(frames, ignore_index=True)
+# ── Group helper ─────────────────────────────────────────────────────────────
+
+
+def _resolve_group(
+    df: pd.DataFrame, group_cfg: dict[str, Any] | None
+) -> pd.DataFrame:
+    if group_cfg is None:
+        return df
+    col: str = group_cfg["column"]
+    if col not in df.columns:
+        return df
+    if "values" in group_cfg and group_cfg["values"]:
+        vals = group_cfg["values"]
+        str_vals = [str(v) for v in vals]
+        mask = df[col].astype(str).isin(str_vals)
+        df = df[mask].copy()
+        df[col] = pd.Categorical(
+            df[col].astype(str), categories=str_vals, ordered=True
+        )
+    if "rename" in group_cfg and group_cfg["rename"]:
+        rmap: dict[str, str] = group_cfg["rename"]
+        df[col] = df[col].astype(str).map(lambda v, _r=rmap: _r.get(v, v))
+        if "values" in group_cfg and group_cfg["values"]:
+            renamed_cats = [
+                rmap.get(str(v), str(v)) for v in group_cfg["values"]
+            ]
+            df[col] = pd.Categorical(
+                df[col], categories=renamed_cats, ordered=True
+            )
+    df["config"] = df[col].astype(str)
+    return df
+
+
+# ── Auto-dedup safety net ────────────────────────────────────────────────────
+
+
+def _auto_dedup(
+    df: pd.DataFrame, x_col: str, y_col: str, plot_id: str
+) -> pd.DataFrame:
+    """
+    Step 8: If multiple rows share the same (config, x) pair, collapse them
+    via mean.  Prevents zigzag lines and stacked anomalies.
+    """
+    if "config" not in df.columns or x_col not in df.columns:
+        return df
+
+    dup_count = df.groupby(["config", x_col]).size()
+    if (dup_count > 1).any():
+        max_dups = int(dup_count.max())
+        st.caption(
+            f"⚠️ [{plot_id}] Up to {max_dups} rows per (config, x) — "
+            f'auto-averaging.  Add `"aggregate"` to spec to control this.'
+        )
+        # Identify all numeric columns to aggregate
+        numeric_cols = df.select_dtypes(include="number").columns.tolist()
+        value_cols = [c for c in numeric_cols if c != x_col]
+        if value_cols:
+            agg_dict: dict[str, str] = {c: "mean" for c in value_cols}
+            # Keep first value for non-numeric columns
+            non_numeric = [
+                c
+                for c in df.columns
+                if c not in numeric_cols and c not in ["config", x_col]
+            ]
+            for c in non_numeric:
+                agg_dict[c] = "first"
+            df = (
+                df.groupby(["config", x_col], observed=True)
+                .agg(agg_dict)
+                .reset_index()
+            )
+    return df
+
+
+# ── Export / save helpers ────────────────────────────────────────────────────
+
+
+def _fig_to_png_bytes(fig: go.Figure, w: int = 1200, h: int = 600) -> bytes:
+    return fig.to_image(format="png", width=w, height=h, scale=2)  # type: ignore[return-value]
+
+
+def _fig_to_svg_bytes(fig: go.Figure, w: int = 1200, h: int = 600) -> bytes:
+    return fig.to_image(format="svg", width=w, height=h)  # type: ignore[return-value]
+
+
+def _fig_to_html_str(fig: go.Figure) -> str:
+    return fig.to_html(include_plotlyjs="cdn", full_html=True)  # type: ignore[return-value]
+
+
+def _build_zip(
+    figures: list[tuple[str, go.Figure]], fmt: str = "html"
+) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for plot_id, fig in figures:
+            safe = plot_id.replace("/", "_").replace("\\", "_")
+            if fmt == "html":
+                zf.writestr(f"{safe}.html", _fig_to_html_str(fig))
+            elif fmt == "png":
+                zf.writestr(f"{safe}.png", _fig_to_png_bytes(fig))
+            elif fmt == "svg":
+                zf.writestr(f"{safe}.svg", _fig_to_svg_bytes(fig))
+    buf.seek(0)
+    return buf.read()
+
+
+# ── JSON auto-plot core ──────────────────────────────────────────────────────
+
+
+def _apply_filters(
+    df: pd.DataFrame, filters: dict[str, list[Any]]
+) -> pd.DataFrame:
+    for col, allowed in filters.items():
+        if col not in df.columns:
+            continue
+        col_series = df[col]
+        matched = pd.Series(False, index=df.index)
+        for val in allowed:
+            if isinstance(val, (int, float)):
+                numeric_col = pd.to_numeric(col_series, errors="coerce")
+                matched = matched | (numeric_col == val)
+            matched = matched | (col_series.astype(str) == str(val))
+        df = df[matched]
+    return df
+
+
+def _render_json_plot(
+    plot_spec: dict[str, Any],
+    all_dfs: dict[str, pd.DataFrame],
+    combined: pd.DataFrame,
+) -> go.Figure | None:
+    """Render a single plot from a JSON spec.  Returns the figure (or None)."""
+    plot_id: str = plot_spec.get("id", "auto")
+    title: str = plot_spec.get("title", "Untitled")
+    chart_type_key: str = plot_spec.get("chart_type", "grouped_bar")
+    chart_type = _CHART_TYPE_MAP.get(chart_type_key, "Grouped Bar")
+    builder = _BUILDERS.get(chart_type)
+    if builder is None:
+        st.error(f"Unknown chart_type: {chart_type_key}")
+        return None
+
+    source = plot_spec.get("source")
+    df = (
+        all_dfs[source].copy()
+        if (source and source in all_dfs)
+        else combined.copy()
+    )
+
+    # ── 1. Computed columns ──────────────────────────────────────────
+    computed = plot_spec.get("computed_columns", [])
+    if computed:
+        df = _compute_columns(df, computed)
+
+    # ── 2. Filters ───────────────────────────────────────────────────
+    filters = plot_spec.get("filters", {})
+    if filters:
+        df = _apply_filters(df, filters)
+
+    x_cfg: dict[str, Any] = plot_spec["x"]
+    y_cfg: dict[str, Any] = plot_spec["y"]
+    group_cfg: dict[str, Any] | None = plot_spec.get("group")
+    agg_cfg: dict[str, Any] = plot_spec.get("aggregate", {})
+    x_col: str = x_cfg["column"]
+    x_label: str = x_cfg.get("label", x_col)
+    y_columns: list[str] = y_cfg.get("columns", [])
+    y_label: str = y_cfg.get("label", y_columns[0] if y_columns else "Value")
+    y_rename: dict[str, str] = y_cfg.get("rename", {})
+
+    if x_col not in df.columns:
+        st.warning(f"[{plot_id}] Column `{x_col}` not found in CSV.")
+        return None
+
+    # Check that at least some y columns exist
+    missing_y = [c for c in y_columns if c not in df.columns]
+    if missing_y:
+        st.warning(
+            f"[{plot_id}] Column(s) `{'`, `'.join(missing_y)}` not found in CSV.  "
+            f"Available: {', '.join(sorted(df.columns))}"
+        )
+        y_columns = [c for c in y_columns if c in df.columns]
+        if not y_columns:
+            return None
+
+    # ── 3. X-values filter (rows only, no formatting) ────────────────
+    df = _filter_x_values(df, x_cfg)
+    if df.empty:
+        st.warning(f"[{plot_id}] No data after applying filters.")
+        return None
+
+    # ── 4. Aggregation (on raw, unformatted data) ────────────────────
+    agg_func: str | None = agg_cfg.get("func")
+    agg_error_bars: str | None = agg_cfg.get("error_bars")
+    if agg_func:
+        gk: list[str] = [x_col]
+        if group_cfg and group_cfg.get("column") in df.columns:
+            gk.append(group_cfg["column"])
+        df = _aggregate_data(
+            df,
+            group_keys=gk,
+            value_cols=y_columns,
+            func=agg_func,
+            error_bars=agg_error_bars,
+        )
+
+    # ── 5. X-axis formatting (categorical + rename, AFTER agg) ───────
+    df = _format_x_axis(df, x_cfg)
+
+    # ── 6. Normalize transform ───────────────────────────────────────
+    transform: dict[str, Any] = plot_spec.get("transform", {})
+    if transform.get("normalize"):
+        df = _normalize_stacked(
+            df, transform.get("normalize_columns", y_columns)
+        )
+
+    # ── 7. Resolve traces ────────────────────────────────────────────
+    multi_y = len(y_columns) > 1
+    has_group = group_cfg is not None
+
+    if multi_y and not has_group:
+        rows: list[pd.DataFrame] = []
+        for yc in y_columns:
+            if yc not in df.columns:
+                continue
+            tmp = df[[x_col, yc]].copy()
+            for suf in ("__err", "__err_plus", "__err_minus"):
+                ec = f"{yc}{suf}"
+                if ec in df.columns:
+                    tmp[f"__y_value__{suf}"] = df[ec]
+            tmp = tmp.rename(columns={yc: "__y_value__"})
+            tmp["config"] = y_rename.get(yc, yc)
+            rows.append(tmp)
+        if not rows:
+            st.warning(f"[{plot_id}] None of {y_columns} found in CSV.")
+            return None
+        plot_df = pd.concat(rows, ignore_index=True)
+        y_plot_col = "__y_value__"
+    elif multi_y and has_group:
+        df = _resolve_group(df, group_cfg)
+        rows = []
+        for yc in y_columns:
+            if yc not in df.columns:
+                continue
+            tmp = df[[x_col, yc, "config"]].copy()
+            tmp = tmp.rename(columns={yc: "__y_value__"})
+            tmp["config"] = tmp["config"] + " — " + y_rename.get(yc, yc)
+            rows.append(tmp)
+        if not rows:
+            st.warning(f"[{plot_id}] None of {y_columns} found in CSV.")
+            return None
+        plot_df = pd.concat(rows, ignore_index=True)
+        y_plot_col = "__y_value__"
+    elif has_group:
+        df = _resolve_group(df, group_cfg)
+        y_plot_col = y_columns[0] if y_columns else "value"
+        if y_plot_col not in df.columns:
+            st.warning(f"[{plot_id}] Column `{y_plot_col}` not found.")
+            return None
+        plot_df = df
+    else:
+        y_plot_col = y_columns[0] if y_columns else "value"
+        if y_plot_col not in df.columns:
+            st.warning(f"[{plot_id}] Column `{y_plot_col}` not found.")
+            return None
+        if "config" not in df.columns:
+            df["config"] = "all"
+        plot_df = df
+
+    # ── 8. Auto-dedup safety net ─────────────────────────────────────
+    plot_df = _auto_dedup(plot_df, x_col, y_plot_col, plot_id)
+
+    # ── 9. Render ────────────────────────────────────────────────────
+    fig = go.Figure()
+    builder(fig, plot_df, x_col, y_plot_col)
+
+    layout_kw: dict[str, Any] = {
+        "title": title,
+        "xaxis_title": x_label,
+        "yaxis_title": y_label,
+        "template": "plotly_white",
+        "height": 600,
+    }
+    layout_kw.update(plot_spec.get("layout", {}))
+    fig.update_layout(**layout_kw)
+
+    render_custom_plotly_chart(fig, width="stretch", key=f"json_{plot_id}")
+
+    note = plot_spec.get("note")
+    if note:
+        st.caption(f"ℹ️ {note}")
+    if plot_spec.get("show_table", False):
+        with st.expander(f"📊 Data table — {plot_id}"):
+            st.dataframe(plot_df, use_container_width=True)
+
+    return fig
+
+
+# ── Manual mode ──────────────────────────────────────────────────────────────
+
+
+def _run_manual_mode(combined: pd.DataFrame) -> None:
     original_configs = list(combined["config"].unique())
 
-    # ── 3. Rename configs ─────────────────────────────────────────────────
     st.sidebar.header("Config Renaming")
     rename_map: dict[str, str] = {}
     for cfg in original_configs:
         new_name = st.sidebar.text_input(
-            f"Rename: {cfg}",
-            value=cfg,
-            key=f"rename_{cfg}",
+            f"Rename: {cfg}", value=cfg, key=f"rename_{cfg}"
         )
         rename_map[cfg] = new_name if new_name is not None else cfg
-
     combined["config"] = combined["config"].map(rename_map)
 
-    # ── 4. Column / metric selection ──────────────────────────────────────
     non_metric_cols = {"config"}
     numeric_cols = [
         c
@@ -189,7 +681,6 @@ def main():
         if c not in non_metric_cols
     ]
     all_cols = [c for c in combined.columns if c not in non_metric_cols]
-
     if not all_cols:
         st.error("CSV contains no usable columns besides `config`.")
         st.stop()
@@ -201,30 +692,50 @@ def main():
         st.error("No numeric metric columns available for Y-axis.")
         st.stop()
 
-    selected_metrics = st.sidebar.multiselect(
+    selected_metrics: list[str] = st.sidebar.multiselect(
         "Y-Axis metric(s)", options=metric_options, default=metric_options[:1]
     )
     if not selected_metrics:
         st.info("Select at least one metric.")
         st.stop()
 
-    # ── Axis label renaming ─────────────────────────────────────────────
-    st.sidebar.header("Axis Labels")
-    x_label = st.sidebar.text_input(
-        "X-Axis label", value=x_col, key="x_axis_label"
+    st.sidebar.header("Aggregation")
+    agg_func = st.sidebar.selectbox(
+        "Aggregate function",
+        options=[
+            "none",
+            "mean",
+            "median",
+            "sum",
+            "count",
+            "min",
+            "max",
+            "std",
+        ],
     )
-    x_label = x_label if x_label else x_col
-    y_label = st.sidebar.text_input(
-        "Y-Axis label",
-        value=selected_metrics[0] if len(selected_metrics) == 1 else "Value",
-        key="y_axis_label",
+    agg_errors = st.sidebar.selectbox(
+        "Error bars", options=["none", "std", "sem", "minmax"]
     )
-    y_label = y_label if y_label else "Value"
 
-    # ── 5. Config filter ──────────────────────────────────────────────────
+    st.sidebar.header("Axis Labels")
+    x_label = (
+        st.sidebar.text_input("X-Axis label", value=x_col, key="x_axis_label")
+        or x_col
+    )
+    y_label = (
+        st.sidebar.text_input(
+            "Y-Axis label",
+            value=selected_metrics[0]
+            if len(selected_metrics) == 1
+            else "Value",
+            key="y_axis_label",
+        )
+        or "Value"
+    )
+
     st.sidebar.header("Config Filter")
     all_configs = list(combined["config"].unique())
-    selected_configs = st.sidebar.multiselect(
+    selected_configs: list[str] = st.sidebar.multiselect(
         "Show configs",
         options=all_configs,
         default=all_configs,
@@ -234,12 +745,20 @@ def main():
         st.stop()
 
     plot_df = combined[combined["config"].isin(selected_configs)].copy()
+    if agg_func != "none":
+        plot_df = _aggregate_data(
+            plot_df,
+            group_keys=[x_col, "config"],
+            value_cols=selected_metrics,
+            func=agg_func,
+            error_bars=agg_errors if agg_errors != "none" else None,
+        )
 
-    # ── 6. Chart type ─────────────────────────────────────────────────────
     st.sidebar.header("Chart Type")
-    chart_type = st.sidebar.selectbox("Visualization", options=CHART_TYPES)
+    chart_type: str = st.sidebar.selectbox(
+        "Visualization", options=CHART_TYPES
+    )  # type: ignore[assignment]
 
-    # ── 7. Render plots ───────────────────────────────────────────────────
     for idx, metric in enumerate(selected_metrics):
         fig = go.Figure()
         _BUILDERS[chart_type](fig, plot_df, x_col, metric)
@@ -252,7 +771,6 @@ def main():
         )
         render_custom_plotly_chart(fig, width="stretch", key=f"csv_plot_{idx}")
 
-    # ── 8. Data table + download ──────────────────────────────────────────
     st.subheader("Data Table")
     st.dataframe(plot_df, use_container_width=True)
     st.download_button(
@@ -261,6 +779,157 @@ def main():
         "combined_results.csv",
         "text/csv",
     )
+
+
+# ── Main ─────────────────────────────────────────────────────────────────────
+
+
+def main() -> None:
+    st.set_page_config(page_title="CSV Plot Editor", layout="wide")
+    st.title("CSV Plot Editor v3")
+    st.markdown(
+        "Upload CSV files exported from **Parameter Sweep Analyzer**, "
+        "rename configs, pick a chart type, and render.  \n"
+        "Upload one or more **JSON plot spec** files to auto-generate all "
+        "plots ([format docs](csv_plot_editor_format.md))."
+    )
+
+    # 1. Upload CSVs
+    uploaded_csvs = st.file_uploader(
+        "Upload one or more sweep-result CSVs",
+        type=["csv"],
+        accept_multiple_files=True,
+        key="csv_uploader",
+    )
+
+    # 2. Upload JSON spec(s)
+    json_files = st.file_uploader(
+        "Upload JSON plot spec(s) (optional — enables auto-plot mode)",
+        type=["json"],
+        accept_multiple_files=True,
+        key="json_uploader",
+    )
+
+    if not uploaded_csvs:
+        st.info("Upload at least one CSV to get started.")
+        st.stop()
+
+    # 3. Read & combine CSVs
+    frames: list[pd.DataFrame] = []
+    named_dfs: dict[str, pd.DataFrame] = {}
+    for uf in uploaded_csvs:
+        try:
+            df = pd.read_csv(uf)
+        except Exception as exc:
+            st.error(f"Failed to read **{uf.name}**: {exc}")
+            continue
+        if "config" not in df.columns:
+            st.warning(
+                f"**{uf.name}** has no `config` column – adding filename."
+            )
+            df["config"] = uf.name.removesuffix(".csv")
+        named_dfs[uf.name] = df
+        frames.append(df)
+
+    if not frames:
+        st.error("No valid CSVs loaded.")
+        st.stop()
+
+    combined = pd.concat(frames, ignore_index=True)
+
+    # 4. Route
+    if json_files:
+        all_plots: list[dict[str, Any]] = []
+        for jf in json_files:
+            try:
+                spec = json.load(jf)
+            except Exception as exc:
+                st.error(f"Failed to parse **{jf.name}**: {exc}")
+                continue
+            plots_in = spec.get("plots", [])
+            all_plots.extend(plots_in)
+            st.info(f"📄 **{jf.name}**: {len(plots_in)} plot(s)")
+
+        if not all_plots:
+            st.warning("JSON spec(s) contain no `plots` entries.")
+            st.stop()
+
+        st.success(
+            f"Auto-plot mode: rendering **{len(all_plots)}** plot(s) "
+            f"from {len(json_files)} JSON file(s)."
+        )
+
+        rendered: list[tuple[str, go.Figure]] = []
+        for ps in all_plots:
+            st.divider()
+            fig = _render_json_plot(ps, named_dfs, combined)
+            if fig is not None:
+                rendered.append((ps.get("id", f"plot_{len(rendered)}"), fig))
+
+        # Save all
+        if rendered:
+            st.divider()
+            st.subheader("💾 Save All Plots")
+            c1, c2, c3 = st.columns(3)
+
+            with c1:
+                st.download_button(
+                    f"📥 All as HTML ({len(rendered)})",
+                    data=_build_zip(rendered, "html"),
+                    file_name="plots_html.zip",
+                    mime="application/zip",
+                    key="dl_all_html",
+                )
+            with c2:
+                try:
+                    st.download_button(
+                        f"📥 All as PNG ({len(rendered)})",
+                        data=_build_zip(rendered, "png"),
+                        file_name="plots_png.zip",
+                        mime="application/zip",
+                        key="dl_all_png",
+                    )
+                except Exception:
+                    st.caption(
+                        "PNG needs `kaleido`: `uv add 'kaleido>=1.0.0'`"
+                    )
+            with c3:
+                try:
+                    st.download_button(
+                        f"📥 All as SVG ({len(rendered)})",
+                        data=_build_zip(rendered, "svg"),
+                        file_name="plots_svg.zip",
+                        mime="application/zip",
+                        key="dl_all_svg",
+                    )
+                except Exception:
+                    st.caption(
+                        "SVG needs `kaleido`: `uv add 'kaleido>=1.0.0'`"
+                    )
+
+            with st.expander("Download individual plots"):
+                for pid, fig in rendered:
+                    ic1, ic2, ic3 = st.columns([3, 1, 1])
+                    ic1.write(f"**{pid}**")
+                    ic2.download_button(
+                        "HTML",
+                        data=_fig_to_html_str(fig),
+                        file_name=f"{pid}.html",
+                        mime="text/html",
+                        key=f"dl_i_html_{pid}",
+                    )
+                    try:
+                        ic3.download_button(
+                            "PNG",
+                            data=_fig_to_png_bytes(fig),
+                            file_name=f"{pid}.png",
+                            mime="image/png",
+                            key=f"dl_i_png_{pid}",
+                        )
+                    except Exception:
+                        ic3.caption("kaleido")
+    else:
+        _run_manual_mode(combined)
 
 
 if __name__ == "__main__":
