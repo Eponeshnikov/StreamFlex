@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import io
 import json
+import time
 import zipfile
 from typing import Any
 
@@ -453,11 +454,15 @@ def _fig_to_html_str(fig: go.Figure) -> str:
 
 
 def _build_zip(
-    figures: list[tuple[str, go.Figure]], fmt: str = "html"
+    figures: list[tuple[str, go.Figure]],
+    fmt: str = "html",
+    progress_callback: callable | None = None,  # type: ignore[assignment]
 ) -> bytes:
+    """Build ZIP file with optional progress callback."""
     buf = io.BytesIO()
+    total = len(figures)
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for plot_id, fig in figures:
+        for idx, (plot_id, fig) in enumerate(figures, 1):
             safe = plot_id.replace("/", "_").replace("\\", "_")
             if fmt == "html":
                 zf.writestr(f"{safe}.html", _fig_to_html_str(fig))
@@ -465,6 +470,8 @@ def _build_zip(
                 zf.writestr(f"{safe}.png", _fig_to_png_bytes(fig))
             elif fmt == "svg":
                 zf.writestr(f"{safe}.svg", _fig_to_svg_bytes(fig))
+            if progress_callback:
+                progress_callback(idx / total)
     buf.seek(0)
     return buf.read()
 
@@ -870,38 +877,100 @@ def main() -> None:
         if rendered:
             st.divider()
             st.subheader("💾 Save All Plots")
+
+            # Store rendered plots in session state
+            _RENDERED_PLOTS_KEY = "csv_plot_editor_rendered_plots"
+            st.session_state[_RENDERED_PLOTS_KEY] = rendered
+
+            # Progress placeholder
+            progress_placeholder = st.empty()
+
+            # Helper function to build ZIP with progress
+            def _build_and_store(fmt: str, key_suffix: str):
+                """Build ZIP with progress and store in session state."""
+                figures = st.session_state.get(_RENDERED_PLOTS_KEY, rendered)
+                with progress_placeholder.container():
+                    progress_bar = st.progress(0)
+                    progress_text = st.empty()
+                try:
+
+                    def update_progress(progress):
+                        progress_bar.progress(progress)
+                        progress_text.text(
+                            f"Building {fmt.upper()}... {int(progress * 100)}%"
+                        )
+
+                    zip_data = _build_zip(
+                        figures, fmt, progress_callback=update_progress
+                    )
+                    progress_bar.progress(1.0)
+                    progress_text.text(f"✓ {fmt.upper()} ready!")
+                    st.session_state[f"zip_data_{key_suffix}"] = zip_data
+                    st.session_state[f"zip_ready_{key_suffix}"] = True
+                finally:
+                    time.sleep(0.5)
+                    progress_placeholder.empty()
+
+            # Build callbacks
+            def _build_html():
+                _build_and_store("html", "html")
+
+            def _build_png():
+                _build_and_store("png", "png")
+
+            def _build_svg():
+                _build_and_store("svg", "svg")
+
             c1, c2, c3 = st.columns(3)
 
             with c1:
-                st.download_button(
-                    f"📥 All as HTML ({len(rendered)})",
-                    data=_build_zip(rendered, "html"),
-                    file_name="plots_html.zip",
-                    mime="application/zip",
-                    key="dl_all_html",
+                st.button(
+                    label=f"🏗️ Build HTML ({len(rendered)})",
+                    on_click=_build_html,
+                    key="build_html",
                 )
+                if st.session_state.get("zip_ready_html", False):
+                    st.download_button(
+                        label="📥 Download HTML",
+                        data=st.session_state["zip_data_html"],
+                        file_name="plots_html.zip",
+                        mime="application/zip",
+                        key="dl_all_html",
+                    )
             with c2:
                 try:
-                    st.download_button(
-                        f"📥 All as PNG ({len(rendered)})",
-                        data=_build_zip(rendered, "png"),
-                        file_name="plots_png.zip",
-                        mime="application/zip",
-                        key="dl_all_png",
+                    st.button(
+                        label=f"🏗️ Build PNG ({len(rendered)})",
+                        on_click=_build_png,
+                        key="build_png",
                     )
+                    if st.session_state.get("zip_ready_png", False):
+                        st.download_button(
+                            label="📥 Download PNG",
+                            data=st.session_state["zip_data_png"],
+                            file_name="plots_png.zip",
+                            mime="application/zip",
+                            key="dl_all_png",
+                        )
                 except Exception:
                     st.caption(
                         "PNG needs `kaleido`: `uv add 'kaleido>=1.0.0'`"
                     )
             with c3:
                 try:
-                    st.download_button(
-                        f"📥 All as SVG ({len(rendered)})",
-                        data=_build_zip(rendered, "svg"),
-                        file_name="plots_svg.zip",
-                        mime="application/zip",
-                        key="dl_all_svg",
+                    st.button(
+                        label=f"🏗️ Build SVG ({len(rendered)})",
+                        on_click=_build_svg,
+                        key="build_svg",
                     )
+                    if st.session_state.get("zip_ready_svg", False):
+                        st.download_button(
+                            label="📥 Download SVG",
+                            data=st.session_state["zip_data_svg"],
+                            file_name="plots_svg.zip",
+                            mime="application/zip",
+                            key="dl_all_svg",
+                        )
                 except Exception:
                     st.caption(
                         "SVG needs `kaleido`: `uv add 'kaleido>=1.0.0'`"
@@ -913,7 +982,7 @@ def main() -> None:
                     ic1.write(f"**{pid}**")
                     ic2.download_button(
                         "HTML",
-                        data=_fig_to_html_str(fig),
+                        data=lambda f=fig: _fig_to_html_str(f),
                         file_name=f"{pid}.html",
                         mime="text/html",
                         key=f"dl_i_html_{pid}",
@@ -921,7 +990,7 @@ def main() -> None:
                     try:
                         ic3.download_button(
                             "PNG",
-                            data=_fig_to_png_bytes(fig),
+                            data=lambda f=fig: _fig_to_png_bytes(f),
                             file_name=f"{pid}.png",
                             mime="image/png",
                             key=f"dl_i_png_{pid}",
