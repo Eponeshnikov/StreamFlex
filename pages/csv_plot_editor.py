@@ -3,21 +3,23 @@ CSV Plot Editor v3.1 – load exported sweep CSVs, rename configs, and visualise
 with multiple chart types via render_custom_plotly_chart.
 
 Pipeline (JSON mode):
-  1. computed_columns   – derive new columns
-  2. filters            – drop non-matching rows
-  3. x.values filter    – keep only requested x-values (no rename yet)
-  4. aggregate          – collapse rows (mean/sum/…) + error bars
-  5. x rename + order   – categorical ordering and display labels
-  6. transform          – normalize stacks, etc.
-  7. group → config     – split into Plotly traces
-  8. auto-dedup         – safety net: aggregate any remaining duplicates
-  9. render             – build Plotly figure
+  1. extract_columns    – regex / auto-KV new columns from text
+  2. computed_columns   – derive new columns
+  3. filters            – drop non-matching rows
+  4. x.values filter    – keep only requested x-values (no rename yet)
+  5. aggregate          – collapse rows (mean/sum/…) + error bars
+  6. x rename + order   – categorical ordering and display labels
+  7. transform          – normalize stacks, etc.
+  8. group → config     – split into Plotly traces
+  9. auto-dedup         – safety net: aggregate any remaining duplicates
+  10. render            – build Plotly figure
 
 Features:
   - Multiple JSON spec files (merged)
   - Save all plots: HTML / PNG / SVG
   - Aggregation: mean, median, sum, count, min, max, std
   - Error bars: std, sem, minmax, q25_q75
+  - Column extraction from text (regex named groups or auto Key:Value)
   - Computed columns (pd.eval expressions)
   - Normalize transform for stacked charts
   - Data table toggle per plot
@@ -27,6 +29,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import time
 import zipfile
 from typing import Any
@@ -165,6 +168,81 @@ def _compute_columns(
             df[name] = df.eval(expr)
         except Exception as exc:
             st.warning(f"Computed column `{name}` failed: {exc}")
+    return df
+
+
+def _extract_regex_columns(
+    df: pd.DataFrame, extractions: list[dict[str, Any]]
+) -> pd.DataFrame:
+    """Extract new columns from text columns using regex or auto key:value detection.
+
+    Each extraction spec can be:
+      - ``{"source": "config", "pattern": "SNR:(?P<SNR>[^|]+)"}``
+        Named-group regex — each ``(?P<name>...)`` becomes a column.
+      - ``{"source": "config", "auto_kv": true}``
+        Auto-split on ``|`` then ``:`` to discover all Key:Value pairs.
+      - ``{"source": "config", "auto_kv": true, "separator": "|",
+            "kv_separator": ":", "keys": ["SNR", "Model"]}``
+        Same, but keep only listed keys.
+    """
+    for spec in extractions:
+        source = spec.get("source", "config")
+        if source not in df.columns:
+            st.warning(f"Extract: column `{source}` not found.")
+            continue
+
+        pattern = spec.get("pattern")
+        auto_kv = spec.get("auto_kv", False)
+
+        if pattern:
+            try:
+                compiled = re.compile(pattern)
+                if not compiled.groupindex:
+                    st.warning(
+                        "Regex has no named groups — use `(?P<Name>...)` syntax."
+                    )
+                    continue
+                extracted = df[source].astype(str).str.extract(compiled)
+                for col in extracted.columns:
+                    df[col] = extracted[col].str.strip()
+                    numeric = pd.to_numeric(df[col], errors="coerce")
+                    if numeric.notna().all():
+                        df[col] = numeric
+            except re.error as exc:
+                st.warning(f"Regex extraction failed: {exc}")
+
+        elif auto_kv:
+            separator = spec.get("separator", "|")
+            kv_separator = spec.get("kv_separator", ":")
+            keys_filter: list[str] | None = spec.get("keys")
+
+            def _parse_kv(
+                text: str,
+                _sep: str = separator,
+                _kv_sep: str = kv_separator,
+            ) -> dict[str, str]:
+                result: dict[str, str] = {}
+                for part in str(text).split(_sep):
+                    part = part.strip()
+                    if _kv_sep in part:
+                        k, v = part.split(_kv_sep, 1)
+                        result[k.strip()] = v.strip()
+                return result
+
+            parsed = df[source].apply(_parse_kv)
+            kv_df = pd.DataFrame(parsed.tolist(), index=df.index)
+
+            if keys_filter:
+                kv_df = kv_df[[k for k in keys_filter if k in kv_df.columns]]
+
+            for col in kv_df.columns:
+                if not col:
+                    continue
+                df[col] = kv_df[col]
+                numeric = pd.to_numeric(df[col], errors="coerce")
+                if numeric.notna().all():
+                    df[col] = numeric
+
     return df
 
 
@@ -518,12 +596,17 @@ def _render_json_plot(
         else combined.copy()
     )
 
-    # ── 1. Computed columns ──────────────────────────────────────────
+    # ── 1. Extract columns from text ─────────────────────────────────
+    extractions = plot_spec.get("extract_columns", [])
+    if extractions:
+        df = _extract_regex_columns(df, extractions)
+
+    # ── 2. Computed columns ──────────────────────────────────────────
     computed = plot_spec.get("computed_columns", [])
     if computed:
         df = _compute_columns(df, computed)
 
-    # ── 2. Filters ───────────────────────────────────────────────────
+    # ── 3. Filters ───────────────────────────────────────────────────
     filters = plot_spec.get("filters", {})
     if filters:
         df = _apply_filters(df, filters)
@@ -553,13 +636,13 @@ def _render_json_plot(
         if not y_columns:
             return None
 
-    # ── 3. X-values filter (rows only, no formatting) ────────────────
+    # ── 4. X-values filter (rows only, no formatting) ────────────────
     df = _filter_x_values(df, x_cfg)
     if df.empty:
         st.warning(f"[{plot_id}] No data after applying filters.")
         return None
 
-    # ── 4. Aggregation (on raw, unformatted data) ────────────────────
+    # ── 5. Aggregation (on raw, unformatted data) ────────────────────
     agg_func: str | None = agg_cfg.get("func")
     agg_error_bars: str | None = agg_cfg.get("error_bars")
     if agg_func:
@@ -574,17 +657,17 @@ def _render_json_plot(
             error_bars=agg_error_bars,
         )
 
-    # ── 5. X-axis formatting (categorical + rename, AFTER agg) ───────
+    # ── 6. X-axis formatting (categorical + rename, AFTER agg) ───────
     df = _format_x_axis(df, x_cfg)
 
-    # ── 6. Normalize transform ───────────────────────────────────────
+    # ── 7. Normalize transform ───────────────────────────────────────
     transform: dict[str, Any] = plot_spec.get("transform", {})
     if transform.get("normalize"):
         df = _normalize_stacked(
             df, transform.get("normalize_columns", y_columns)
         )
 
-    # ── 7. Resolve traces ────────────────────────────────────────────
+    # ── 8. Resolve traces ────────────────────────────────────────────
     multi_y = len(y_columns) > 1
     has_group = group_cfg is not None
 
@@ -637,10 +720,10 @@ def _render_json_plot(
             df["config"] = "all"
         plot_df = df
 
-    # ── 8. Auto-dedup safety net ─────────────────────────────────────
+    # ── 9. Auto-dedup safety net ─────────────────────────────────────
     plot_df = _auto_dedup(plot_df, x_col, y_plot_col, plot_id)
 
-    # ── 9. Render ────────────────────────────────────────────────────
+    # ── 10. Render ───────────────────────────────────────────────────
     fig = go.Figure()
     builder(fig, plot_df, x_col, y_plot_col)
 
@@ -670,6 +753,77 @@ def _render_json_plot(
 
 
 def _run_manual_mode(combined: pd.DataFrame) -> None:
+    # ── Column extraction from text ────────────────────────────────
+    st.sidebar.header("Column Extraction")
+    enable_extract = st.sidebar.checkbox(
+        "Extract columns via regex", key="enable_extract"
+    )
+    if enable_extract:
+        all_source_cols = list(combined.columns)
+        default_src_idx = (
+            all_source_cols.index("config")
+            if "config" in all_source_cols
+            else 0
+        )
+        extract_source: str = st.sidebar.selectbox(
+            "Source column",
+            options=all_source_cols,
+            index=default_src_idx,
+            key="extract_source",
+        )
+        extract_mode = st.sidebar.radio(
+            "Extraction mode",
+            ["Auto (Key:Value pairs)", "Custom regex"],
+            key="extract_mode",
+        )
+        if extract_mode == "Auto (Key:Value pairs)":
+            ec1, ec2 = st.sidebar.columns(2)
+            sep = ec1.text_input(
+                "Pair separator", value="|", key="extract_sep"
+            )
+            kv_sep = ec2.text_input(
+                "Key:Value sep", value=":", key="extract_kv_sep"
+            )
+            extractions = [
+                {
+                    "source": extract_source,
+                    "auto_kv": True,
+                    "separator": sep,
+                    "kv_separator": kv_sep,
+                }
+            ]
+        else:
+            pattern = st.sidebar.text_input(
+                "Regex with named groups `(?P<Name>...)`",
+                value=r"SNR:(?P<SNR>[^|]+)",
+                key="extract_pattern",
+            )
+            extractions = [{"source": extract_source, "pattern": pattern}]
+
+        pre_cols = set(combined.columns)
+        combined = _extract_regex_columns(combined, extractions)
+        new_cols = [c for c in combined.columns if c not in pre_cols]
+        if new_cols:
+            st.sidebar.success(f"Extracted: {', '.join(new_cols)}")
+        else:
+            st.sidebar.info("No new columns extracted.")
+
+    # ── Group / trace column ───────────────────────────────────────
+    st.sidebar.header("Group / Trace Column")
+    all_available = list(combined.columns)
+    default_group_idx = (
+        all_available.index("config") if "config" in all_available else 0
+    )
+    group_col: str = st.sidebar.selectbox(
+        "Group traces by",
+        options=all_available,
+        index=default_group_idx,
+        key="group_col",
+    )
+    if group_col != "config":
+        combined["config"] = combined[group_col].astype(str)
+
+    # ── Config renaming ────────────────────────────────────────────
     original_configs = list(combined["config"].unique())
 
     st.sidebar.header("Config Renaming")
