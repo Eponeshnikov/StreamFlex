@@ -431,6 +431,11 @@ def _format_x_axis(df: pd.DataFrame, x_cfg: dict[str, Any]) -> pd.DataFrame:
         # Convert to string first to ensure consistency
         df[col] = df[col].astype(str)
         df[col] = pd.Categorical(df[col], categories=str_vals, ordered=True)
+    else:
+        # Auto-sort numerically when all x values are numeric
+        numeric = pd.to_numeric(df[col], errors="coerce")
+        if numeric.notna().all():
+            df[col] = numeric
     if "rename" in x_cfg and x_cfg["rename"]:
         rmap: dict[str, str] = x_cfg["rename"]
         df[col] = df[col].astype(str).map(lambda v, _r=rmap: _r.get(v, v))
@@ -914,6 +919,11 @@ def _run_manual_mode(combined: pd.DataFrame) -> None:
             func=agg_func,
             error_bars=agg_errors if agg_errors != "none" else None,
         )
+
+    # Auto-sort x-axis numerically when all values are numeric
+    numeric_x = pd.to_numeric(plot_df[x_col], errors="coerce")
+    if numeric_x.notna().all():
+        plot_df[x_col] = numeric_x
 
     st.sidebar.header("Chart Type")
     chart_type: str = st.sidebar.selectbox(
