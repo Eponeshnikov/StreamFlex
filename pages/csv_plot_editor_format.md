@@ -42,6 +42,8 @@ Generate publication-ready plots from CSV data by describing them in JSON.
 | `aggregate` | object | no | Collapse rows sharing the same (x, group) pair. |
 | `transform` | object | no | Post-aggregation transforms (e.g. normalize to 100%). |
 | `layout` | object | no | Plotly layout overrides (passed directly to `fig.update_layout`). |
+| `line_dash` | string or object | no | Line style for line/area charts. See [Line Dash](#line-dash-line_dash). |
+| `opacity` | number | no | Trace opacity, `0.0` (transparent) to `1.0` (opaque). Applies to all chart types. |
 | `show_table` | bool | no | Show an expandable data table under the plot. |
 | `note` | string | no | Caption displayed below the chart. |
 
@@ -251,6 +253,42 @@ Post-aggregation transformations.
 |---|---|---|
 | `normalize` | bool | Rescale Y columns so each row sums to 100%. |
 | `normalize_columns` | array | Which Y columns to normalize (defaults to all `y.columns`). |
+
+---
+
+## Line Dash (`line_dash`)
+
+Set the line style for `line` and `stacked_area` charts. Ignored by bar and heatmap chart types.
+
+Available styles: `solid`, `dot`, `dash`, `longdash`, `dashdot`, `longdashdot`.
+
+As a **string** — applies the same dash to every trace:
+
+```json
+"line_dash": "dash"
+```
+
+As an **object** — map config/trace names to individual styles:
+
+```json
+"line_dash": {
+  "Ray Tracing": "solid",
+  "TDL": "dot",
+  "CDL": "dashdot"
+}
+```
+
+Unmapped traces default to `"solid"`.
+
+---
+
+## Opacity (`opacity`)
+
+Trace opacity from `0.0` (fully transparent) to `1.0` (fully opaque). Applies to all chart types.
+
+```json
+"opacity": 0.7
+```
 
 ---
 

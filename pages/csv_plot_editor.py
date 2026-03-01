@@ -299,81 +299,158 @@ def _get_error_arrays(df: pd.DataFrame, y_col: str) -> dict[str, Any] | None:
     return None
 
 
+_DASH_STYLES: list[str] = [
+    "solid",
+    "dot",
+    "dash",
+    "longdash",
+    "dashdot",
+    "longdashdot",
+]
+
+_DASH_MAP: dict[str, str] = {s: s for s in _DASH_STYLES}
+_DASH_MAP.update({"dotted": "dot", "dashed": "dash"})
+
+
+def _resolve_dash(
+    cfg: str,
+    idx: int,
+    line_dash: str | dict[str, str] | None,
+) -> str:
+    """Return a Plotly dash string for the given config/index."""
+    if line_dash is None:
+        return "solid"
+    if isinstance(line_dash, dict):
+        raw = line_dash.get(cfg, "solid")
+    else:
+        raw = str(line_dash)
+    return _DASH_MAP.get(raw, raw)
+
+
 def _build_line(
-    fig: go.Figure, df: pd.DataFrame, x_col: str, y_col: str
+    fig: go.Figure,
+    df: pd.DataFrame,
+    x_col: str,
+    y_col: str,
+    *,
+    line_dash: str | dict[str, str] | None = None,
+    opacity: float | None = None,
 ) -> None:
-    for cfg in df["config"].unique():
+    for idx, cfg in enumerate(df["config"].unique()):
         sub = df[df["config"] == cfg].sort_values(x_col)
-        fig.add_trace(
-            go.Scatter(
-                x=sub[x_col],
-                y=sub[y_col],
-                mode="lines+markers",
-                name=str(cfg),
-                error_y=_get_error_arrays(sub, y_col),
-            )
+        dash = _resolve_dash(cfg, idx, line_dash)
+        trace_kw: dict[str, Any] = dict(
+            x=sub[x_col],
+            y=sub[y_col],
+            mode="lines+markers",
+            name=str(cfg),
+            error_y=_get_error_arrays(sub, y_col),
+            line=dict(dash=dash),
         )
+        if opacity is not None:
+            trace_kw["opacity"] = opacity
+        fig.add_trace(go.Scatter(**trace_kw))
 
 
 def _build_bar(
-    fig: go.Figure, df: pd.DataFrame, x_col: str, y_col: str
+    fig: go.Figure,
+    df: pd.DataFrame,
+    x_col: str,
+    y_col: str,
+    *,
+    line_dash: str | dict[str, str] | None = None,
+    opacity: float | None = None,
 ) -> None:
     for cfg in df["config"].unique():
         sub = df[df["config"] == cfg].sort_values(x_col)
-        fig.add_trace(
-            go.Bar(
-                x=sub[x_col],
-                y=sub[y_col],
-                name=str(cfg),
-                error_y=_get_error_arrays(sub, y_col),
-            )
+        trace_kw: dict[str, Any] = dict(
+            x=sub[x_col],
+            y=sub[y_col],
+            name=str(cfg),
+            error_y=_get_error_arrays(sub, y_col),
         )
+        if opacity is not None:
+            trace_kw["opacity"] = opacity
+        fig.add_trace(go.Bar(**trace_kw))
     fig.update_layout(barmode="overlay")
 
 
 def _build_grouped_bar(
-    fig: go.Figure, df: pd.DataFrame, x_col: str, y_col: str
+    fig: go.Figure,
+    df: pd.DataFrame,
+    x_col: str,
+    y_col: str,
+    *,
+    line_dash: str | dict[str, str] | None = None,
+    opacity: float | None = None,
 ) -> None:
     for cfg in df["config"].unique():
         sub = df[df["config"] == cfg].sort_values(x_col)
-        fig.add_trace(
-            go.Bar(
-                x=sub[x_col],
-                y=sub[y_col],
-                name=str(cfg),
-                error_y=_get_error_arrays(sub, y_col),
-            )
+        trace_kw: dict[str, Any] = dict(
+            x=sub[x_col],
+            y=sub[y_col],
+            name=str(cfg),
+            error_y=_get_error_arrays(sub, y_col),
         )
+        if opacity is not None:
+            trace_kw["opacity"] = opacity
+        fig.add_trace(go.Bar(**trace_kw))
     fig.update_layout(barmode="group")
 
 
 def _build_stacked_bar(
-    fig: go.Figure, df: pd.DataFrame, x_col: str, y_col: str
+    fig: go.Figure,
+    df: pd.DataFrame,
+    x_col: str,
+    y_col: str,
+    *,
+    line_dash: str | dict[str, str] | None = None,
+    opacity: float | None = None,
 ) -> None:
     for cfg in df["config"].unique():
         sub = df[df["config"] == cfg].sort_values(x_col)
-        fig.add_trace(go.Bar(x=sub[x_col], y=sub[y_col], name=str(cfg)))
+        trace_kw: dict[str, Any] = dict(
+            x=sub[x_col], y=sub[y_col], name=str(cfg)
+        )
+        if opacity is not None:
+            trace_kw["opacity"] = opacity
+        fig.add_trace(go.Bar(**trace_kw))
     fig.update_layout(barmode="stack")
 
 
 def _build_stacked_area(
-    fig: go.Figure, df: pd.DataFrame, x_col: str, y_col: str
+    fig: go.Figure,
+    df: pd.DataFrame,
+    x_col: str,
+    y_col: str,
+    *,
+    line_dash: str | dict[str, str] | None = None,
+    opacity: float | None = None,
 ) -> None:
-    for cfg in df["config"].unique():
+    for idx, cfg in enumerate(df["config"].unique()):
         sub = df[df["config"] == cfg].sort_values(x_col)
-        fig.add_trace(
-            go.Scatter(
-                x=sub[x_col],
-                y=sub[y_col],
-                mode="lines",
-                stackgroup="one",
-                name=str(cfg),
-            )
+        dash = _resolve_dash(cfg, idx, line_dash)
+        trace_kw: dict[str, Any] = dict(
+            x=sub[x_col],
+            y=sub[y_col],
+            mode="lines",
+            stackgroup="one",
+            name=str(cfg),
+            line=dict(dash=dash),
         )
+        if opacity is not None:
+            trace_kw["opacity"] = opacity
+        fig.add_trace(go.Scatter(**trace_kw))
 
 
 def _build_heatmap(
-    fig: go.Figure, df: pd.DataFrame, x_col: str, y_col: str
+    fig: go.Figure,
+    df: pd.DataFrame,
+    x_col: str,
+    y_col: str,
+    *,
+    line_dash: str | dict[str, str] | None = None,
+    opacity: float | None = None,
 ) -> None:
     piv = df.pivot_table(
         index="config", columns=x_col, values=y_col, aggfunc="mean"
@@ -729,8 +806,18 @@ def _render_json_plot(
     plot_df = _auto_dedup(plot_df, x_col, y_plot_col, plot_id)
 
     # ── 10. Render ───────────────────────────────────────────────────
+    style_line_dash: str | dict[str, str] | None = plot_spec.get("line_dash")
+    style_opacity: float | None = plot_spec.get("opacity")
+
     fig = go.Figure()
-    builder(fig, plot_df, x_col, y_plot_col)
+    builder(
+        fig,
+        plot_df,
+        x_col,
+        y_plot_col,
+        line_dash=style_line_dash,
+        opacity=style_opacity,
+    )
 
     layout_kw: dict[str, Any] = {
         "title": title,
@@ -930,9 +1017,31 @@ def _run_manual_mode(combined: pd.DataFrame) -> None:
         "Visualization", options=CHART_TYPES
     )  # type: ignore[assignment]
 
+    st.sidebar.header("Style")
+    manual_line_dash: str = st.sidebar.selectbox(
+        "Line style",
+        options=_DASH_STYLES,
+        index=0,
+        key="manual_line_dash",
+    )  # type: ignore[assignment]
+    manual_opacity: float = st.sidebar.slider(
+        "Opacity",
+        min_value=0.0,
+        max_value=1.0,
+        value=1.0,
+        step=0.05,
+        key="manual_opacity",
+    )
+
+    style_kw: dict[str, Any] = {}
+    if manual_line_dash != "solid":
+        style_kw["line_dash"] = manual_line_dash
+    if manual_opacity < 1.0:
+        style_kw["opacity"] = manual_opacity
+
     for idx, metric in enumerate(selected_metrics):
         fig = go.Figure()
-        _BUILDERS[chart_type](fig, plot_df, x_col, metric)
+        _BUILDERS[chart_type](fig, plot_df, x_col, metric, **style_kw)
         fig.update_layout(
             title=f"{metric} vs {x_label}",
             xaxis_title=x_label,
