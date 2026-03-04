@@ -53,7 +53,7 @@ except ImportError:
     def render_custom_plotly_chart(
         fig: go.Figure, width: Any = "stretch", key: str | None = None
     ) -> None:
-        st.plotly_chart(fig, use_container_width=(width == "stretch"))
+        st.plotly_chart(fig, width=width)
 
 
 # ── Aggregation helpers ──────────────────────────────────────────────────────
@@ -570,7 +570,7 @@ def _auto_dedup(
     if "config" not in df.columns or x_col not in df.columns:
         return df
 
-    dup_count = df.groupby(["config", x_col]).size()
+    dup_count = df.groupby(["config", x_col], observed=True).size()
     if (dup_count > 1).any():
         max_dups = int(dup_count.max())
         st.caption(
@@ -836,7 +836,7 @@ def _render_json_plot(
         st.caption(f"ℹ️ {note}")
     if plot_spec.get("show_table", False):
         with st.expander(f"📊 Data table — {plot_id}"):
-            st.dataframe(plot_df, use_container_width=True)
+            st.dataframe(plot_df, width="stretch")
 
     return fig
 
@@ -1052,7 +1052,7 @@ def _run_manual_mode(combined: pd.DataFrame) -> None:
         render_custom_plotly_chart(fig, width="stretch", key=f"csv_plot_{idx}")
 
     st.subheader("Data Table")
-    st.dataframe(plot_df, use_container_width=True)
+    st.dataframe(plot_df, width="stretch")
     st.download_button(
         "Download combined CSV",
         plot_df.to_csv(index=False),

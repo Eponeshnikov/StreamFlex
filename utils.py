@@ -85,7 +85,7 @@ def render_custom_plotly_chart(
 
     Args:
         fig (go.Figure): The Plotly figure object to render.
-        use_container_width (bool, optional): Expand the chart to container's width. Defaults to True.
+        width (str, optional): Chart width - "stretch" or "content". Defaults to "stretch".
         key (str): A unique key for the component. This is REQUIRED if you are rendering
                 more than one chart on the page to prevent widget state collisions.
     """
