@@ -178,3 +178,4 @@ configs/page_categories.yaml
 pages/.gitignore
 other_docs
 sionna-scenes
+*.json

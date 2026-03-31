@@ -261,6 +261,34 @@ def _normalize_stacked(df: pd.DataFrame, y_columns: list[str]) -> pd.DataFrame:
     return df
 
 
+def _normalize_distribution(
+    df: pd.DataFrame,
+    y_columns: list[str],
+    ref_column: str | None = None,
+) -> pd.DataFrame:
+    """Normalize Y columns as a per-row distribution (%).
+
+    When *ref_column* is provided, each row's Y values are divided by that
+    row's *ref_column* value (per-bin normalization).  Otherwise each column
+    is divided by its own sum independently.
+    """
+    existing = [c for c in y_columns if c in df.columns]
+    if not existing:
+        return df
+    df = df.copy()
+    if ref_column and ref_column in df.columns:
+        total = float(df[ref_column].sum())
+        if total > 0:
+            for c in existing:
+                df[c] = df[c] / total * 100.0
+    else:
+        for c in existing:
+            col_sum = float(df[c].sum())
+            if col_sum > 0:
+                df[c] = df[c] / col_sum * 100.0
+    return df
+
+
 # ── Chart builders ───────────────────────────────────────────────────────────
 
 CHART_TYPES: list[str] = [
@@ -727,14 +755,24 @@ def _render_json_plot(
     # ── 5. Aggregation (on raw, unformatted data) ────────────────────
     agg_func: str | None = agg_cfg.get("func")
     agg_error_bars: str | None = agg_cfg.get("error_bars")
+    transform: dict[str, Any] = plot_spec.get("transform", {})
     if agg_func:
         gk: list[str] = [x_col]
         if group_cfg and group_cfg.get("column") in df.columns:
             gk.append(group_cfg["column"])
+        # Include normalize ref column in aggregation so it survives
+        _agg_value_cols = list(y_columns)
+        _norm_ref = transform.get("normalize_ref_column")
+        if (
+            _norm_ref
+            and _norm_ref in df.columns
+            and _norm_ref not in _agg_value_cols
+        ):
+            _agg_value_cols.append(_norm_ref)
         df = _aggregate_data(
             df,
             group_keys=gk,
-            value_cols=y_columns,
+            value_cols=_agg_value_cols,
             func=agg_func,
             error_bars=agg_error_bars,
         )
@@ -743,10 +781,15 @@ def _render_json_plot(
     df = _format_x_axis(df, x_cfg)
 
     # ── 7. Normalize transform ───────────────────────────────────────
-    transform: dict[str, Any] = plot_spec.get("transform", {})
     if transform.get("normalize"):
         df = _normalize_stacked(
             df, transform.get("normalize_columns", y_columns)
+        )
+    if transform.get("normalize_distribution"):
+        df = _normalize_distribution(
+            df,
+            transform.get("normalize_columns", y_columns),
+            ref_column=transform.get("normalize_ref_column"),
         )
 
     # ── 8. Resolve traces ────────────────────────────────────────────
@@ -826,6 +869,12 @@ def _render_json_plot(
         "template": "plotly_white",
         "height": 600,
     }
+    x_scale = plot_spec.get("x_scale")
+    y_scale = plot_spec.get("y_scale")
+    if x_scale:
+        layout_kw["xaxis_type"] = x_scale
+    if y_scale:
+        layout_kw["yaxis_type"] = y_scale
     layout_kw.update(plot_spec.get("layout", {}))
     fig.update_layout(**layout_kw)
 
@@ -986,6 +1035,15 @@ def _run_manual_mode(combined: pd.DataFrame) -> None:
         or "Value"
     )
 
+    st.sidebar.header("Axis Scale")
+    _scale_opts = ["linear", "log"]
+    x_scale_type: str = st.sidebar.selectbox(
+        "X-Axis scale", options=_scale_opts, index=0, key="x_scale_type"
+    )  # type: ignore[assignment]
+    y_scale_type: str = st.sidebar.selectbox(
+        "Y-Axis scale", options=_scale_opts, index=0, key="y_scale_type"
+    )  # type: ignore[assignment]
+
     st.sidebar.header("Config Filter")
     all_configs = list(combined["config"].unique())
     selected_configs: list[str] = st.sidebar.multiselect(
@@ -1042,12 +1100,18 @@ def _run_manual_mode(combined: pd.DataFrame) -> None:
     for idx, metric in enumerate(selected_metrics):
         fig = go.Figure()
         _BUILDERS[chart_type](fig, plot_df, x_col, metric, **style_kw)
+        scale_kw: dict[str, Any] = {}
+        if x_scale_type != "linear":
+            scale_kw["xaxis_type"] = x_scale_type
+        if y_scale_type != "linear":
+            scale_kw["yaxis_type"] = y_scale_type
         fig.update_layout(
             title=f"{metric} vs {x_label}",
             xaxis_title=x_label,
             yaxis_title=y_label,
             template="plotly_white",
             height=600,
+            **scale_kw,
         )
         render_custom_plotly_chart(fig, width="stretch", key=f"csv_plot_{idx}")
 
