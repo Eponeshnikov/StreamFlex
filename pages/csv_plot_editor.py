@@ -265,18 +265,35 @@ def _normalize_distribution(
     df: pd.DataFrame,
     y_columns: list[str],
     ref_column: str | None = None,
+    group_column: str | None = None,
 ) -> pd.DataFrame:
     """Normalize Y columns as a per-row distribution (%).
 
     When *ref_column* is provided, each row's Y values are divided by that
     row's *ref_column* value (per-bin normalization).  Otherwise each column
     is divided by its own sum independently.
+
+    When *group_column* is provided, normalization is performed independently
+    within each group so that grouped plots are comparable.
     """
     existing = [c for c in y_columns if c in df.columns]
     if not existing:
         return df
     df = df.copy()
-    if ref_column and ref_column in df.columns:
+
+    if group_column and group_column in df.columns:
+        for _, idx in df.groupby(group_column).groups.items():
+            if ref_column and ref_column in df.columns:
+                total = float(df.loc[idx, ref_column].sum())
+                if total > 0:
+                    for c in existing:
+                        df.loc[idx, c] = df.loc[idx, c] / total * 100.0
+            else:
+                for c in existing:
+                    col_sum = float(df.loc[idx, c].sum())
+                    if col_sum > 0:
+                        df.loc[idx, c] = df.loc[idx, c] / col_sum * 100.0
+    elif ref_column and ref_column in df.columns:
         total = float(df[ref_column].sum())
         if total > 0:
             for c in existing:
@@ -286,6 +303,34 @@ def _normalize_distribution(
             col_sum = float(df[c].sum())
             if col_sum > 0:
                 df[c] = df[c] / col_sum * 100.0
+    return df
+
+
+def _normalize_group_peak(
+    df: pd.DataFrame,
+    y_columns: list[str],
+    group_column: str | None = None,
+) -> pd.DataFrame:
+    """Scale each group so its peak Y value equals 100.
+
+    This makes groups with slightly different absolute magnitudes (e.g. due to
+    noise realisation differences) directly comparable by shape.
+    """
+    existing = [c for c in y_columns if c in df.columns]
+    if not existing:
+        return df
+    df = df.copy()
+    if group_column and group_column in df.columns:
+        for _, idx in df.groupby(group_column).groups.items():
+            peak = df.loc[idx, existing].max().max()
+            if peak > 0:
+                for c in existing:
+                    df.loc[idx, c] = df.loc[idx, c] / peak * 100.0
+    else:
+        peak = df[existing].max().max()
+        if peak > 0:
+            for c in existing:
+                df[c] = df[c] / peak * 100.0
     return df
 
 
@@ -786,10 +831,27 @@ def _render_json_plot(
             df, transform.get("normalize_columns", y_columns)
         )
     if transform.get("normalize_distribution"):
+        _grp_col = (
+            group_cfg["column"]
+            if group_cfg and group_cfg.get("column") in df.columns
+            else None
+        )
         df = _normalize_distribution(
             df,
             transform.get("normalize_columns", y_columns),
             ref_column=transform.get("normalize_ref_column"),
+            group_column=_grp_col,
+        )
+    if transform.get("normalize_group_peak"):
+        _grp_col = (
+            group_cfg["column"]
+            if group_cfg and group_cfg.get("column") in df.columns
+            else None
+        )
+        df = _normalize_group_peak(
+            df,
+            transform.get("normalize_columns", y_columns),
+            group_column=_grp_col,
         )
 
     # ── 8. Resolve traces ────────────────────────────────────────────

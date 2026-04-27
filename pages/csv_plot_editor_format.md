@@ -40,7 +40,9 @@ Generate publication-ready plots from CSV data by describing them in JSON.
 | `y` | object | yes | Y-axis configuration. |
 | `group` | object | no | Split data into separate traces. |
 | `aggregate` | object | no | Collapse rows sharing the same (x, group) pair. |
-| `transform` | object | no | Post-aggregation transforms (e.g. normalize to 100%). |
+| `transform` | object | no | Post-aggregation transforms (normalize, scale). See [Transform](#transform-transform). |
+| `x_scale` | string | no | X-axis scale type: `"linear"` (default) or `"log"`. |
+| `y_scale` | string | no | Y-axis scale type: `"linear"` (default) or `"log"`. |
 | `layout` | object | no | Plotly layout overrides (passed directly to `fig.update_layout`). |
 | `line_dash` | string or object | no | Line style for line/area charts. See [Line Dash](#line-dash-line_dash). |
 | `opacity` | number | no | Trace opacity, `0.0` (transparent) to `1.0` (opaque). Applies to all chart types. |
@@ -62,7 +64,7 @@ CSV data
   ├─  4. x.values filter    Keep only requested x-values (no rename yet)
   ├─  5. aggregate          Collapse rows (mean/sum/…) + error bars
   ├─  6. x format           Apply categorical ordering + rename (after aggregation)
-  ├─  7. transform          Normalize stacks, etc.
+  ├─  7. transform          Normalize stacks, distributions, peak-scale groups
   ├─  8. group → config     Split into Plotly traces
   ├─  9. auto-dedup         Average any remaining (config, x) duplicates
   └─ 10. render             Build Plotly figure
@@ -220,7 +222,7 @@ Split data into separate traces by a column's values.
 | 1 | no | 1 trace labelled "all" |
 | 1 | yes | 1 trace per group value |
 | N > 1 | no | 1 trace per Y column |
-| N > 1 | yes | N x G traces (group — y_column) |
+| N > 1 | yes | N × G traces (group — y_column) |
 
 ---
 
@@ -235,7 +237,7 @@ Collapse multiple rows that share the same (x, group) combination into a single 
 
 Error bar types:
 - `std` — symmetric ±1 standard deviation
-- `sem` — symmetric ±SEM (std / sqrt(n))
+- `sem` — symmetric ±SEM (std / √n)
 - `minmax` — asymmetric bars from actual min/max values
 - `q25_q75` — asymmetric bars from 25th/75th percentiles
 
@@ -247,12 +249,73 @@ Error bar types:
 
 ## Transform (`transform`)
 
-Post-aggregation transformations.
+Post-aggregation transformations applied at step 7. Multiple transforms can be combined — they run in this order:
+
+1. `normalize` — row-wise normalization (stacked → 100%)
+2. `normalize_distribution` — column-wise distribution normalization
+3. `normalize_group_peak` — per-group peak scaling
 
 | Field | Type | Description |
 |---|---|---|
-| `normalize` | bool | Rescale Y columns so each row sums to 100%. |
+| `normalize` | bool | Rescale Y columns so each row sums to 100%. Use for stacked charts. |
+| `normalize_distribution` | bool | Normalize Y columns as a distribution (%). See below. |
+| `normalize_ref_column` | string | Reference column for distribution normalization. Each column is divided by this column's total. |
 | `normalize_columns` | array | Which Y columns to normalize (defaults to all `y.columns`). |
+| `normalize_group_peak` | bool | Scale each group so its peak Y value equals 100%. Makes groups directly comparable by shape. |
+
+### `normalize` (row-wise, for stacked charts)
+
+Each row's Y values are divided by their sum, then multiplied by 100. This makes stacked bar / stacked area charts show proportions instead of raw values.
+
+```json
+"transform": {"normalize": true}
+```
+
+### `normalize_distribution` (column-wise)
+
+Converts absolute values into a percentage distribution across bins/rows.
+
+- **Without** `normalize_ref_column`: each Y column is independently divided by its own sum.
+- **With** `normalize_ref_column`: all Y columns are divided by the ref column's total sum.
+
+When a `group` column is present, normalization is performed **per group** — each group's values sum to 100% independently.
+
+```json
+"transform": {
+  "normalize_distribution": true,
+  "normalize_ref_column": "True Ray Power in Bin"
+}
+```
+
+### `normalize_group_peak` (peak scaling)
+
+After other normalizations, scales each group independently so its maximum Y value equals 100. Useful when groups have slightly different absolute magnitudes (e.g. due to noise or realization differences) and you want to compare their shapes directly.
+
+When no `group` column is present, the entire dataset is scaled by its global peak.
+
+```json
+"transform": {
+  "normalize_distribution": true,
+  "normalize_ref_column": "True Ray Power in Bin",
+  "normalize_group_peak": true
+}
+```
+
+---
+
+## Axis Scale (`x_scale`, `y_scale`)
+
+Set axis scale type at the plot level. Maps to Plotly's `xaxis_type` / `yaxis_type`.
+
+| Value | Description |
+|---|---|
+| `"linear"` | Linear scale (default). |
+| `"log"` | Logarithmic scale. |
+
+```json
+"x_scale": "linear",
+"y_scale": "log"
+```
 
 ---
 
@@ -301,7 +364,8 @@ Flat dictionary passed directly to `fig.update_layout()`:
   "height": 700,
   "yaxis_range": [0.5, 1.0],
   "bargap": 0.15,
-  "legend_title_text": "Model"
+  "legend_title_text": "Model",
+  "colorway": ["#1f77b4", "#ff7f0e", "#2ca02c"]
 }
 ```
 
@@ -383,6 +447,41 @@ Config 1 | SNR:-10 | Scene:florence | Logic:Logic 3 | Model:RT
       "aggregate": {"func": "mean"}
     },
     {
+      "id": "power_distribution",
+      "title": "Power Distribution by Bin (RT, SNR=-10)",
+      "chart_type": "stacked_area",
+      "filters": {"config": ["All Scenes SNR=-10 | Logic:Logic 3 | Model:RT"]},
+      "x": {"column": "SNR_Point", "label": "Per-ray SNR (dB)"},
+      "y": {
+        "columns": ["TP Power in Bin", "Lost (FN) Power in Bin", "Lost (Time Res) Power in Bin"],
+        "label": "Share of total power (%)"
+      },
+      "aggregate": {"func": "mean"},
+      "transform": {
+        "normalize_distribution": true,
+        "normalize_ref_column": "True Ray Power in Bin"
+      }
+    },
+    {
+      "id": "power_comparison_grouped",
+      "title": "Power Comparison Across Configs",
+      "chart_type": "line",
+      "x": {"column": "SNR_Point", "label": "Per-ray SNR (dB)"},
+      "y": {
+        "columns": ["True Ray Power in Bin", "TP Power in Bin"],
+        "label": "Share of group peak (%)"
+      },
+      "group": {"column": "config"},
+      "aggregate": {"func": "mean"},
+      "transform": {
+        "normalize_distribution": true,
+        "normalize_ref_column": "True Ray Power in Bin",
+        "normalize_group_peak": true
+      },
+      "y_scale": "log",
+      "line_dash": {"RT": "solid", "TDL": "dash"}
+    },
+    {
       "id": "computed_example",
       "title": "Acc-F1 Gap vs SNR",
       "chart_type": "line",
@@ -411,5 +510,8 @@ Config 1 | SNR:-10 | Scene:florence | Logic:Logic 3 | Model:RT
 4. **Add error bars** when aggregating 3+ items — `std` or `sem` for line charts, skip for stacked charts.
 5. **Use `computed_columns`** for derived metrics not in the CSV.
 6. **Use `transform.normalize`** for stacked charts where layers should sum to 100%.
-7. **Filter values must match the CSV exactly** — check casing, whitespace, and units.
-8. **Always include `id`** — use descriptive slugs like `"fig01_acc_by_scene"`.
+7. **Use `transform.normalize_distribution`** to convert absolute power/count values into a percentage distribution across bins. Add `normalize_ref_column` when all Y columns should be divided by a common reference column's total.
+8. **Use `transform.normalize_group_peak`** when comparing groups that differ in absolute magnitude but you want to compare their shapes (peaks aligned at 100%).
+9. **Use `x_scale` / `y_scale`** to switch axes to logarithmic scale.
+10. **Filter values must match the CSV exactly** — check casing, whitespace, and units.
+11. **Always include `id`** — use descriptive slugs like `"fig01_acc_by_scene"`.
