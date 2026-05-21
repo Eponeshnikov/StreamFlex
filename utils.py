@@ -945,7 +945,7 @@ def render_sionna_scene_plotly(
     for tx_name in tx_names_to_render:
         if tx_name in scene.transmitters:
             tx = scene.transmitters[tx_name]
-            pos = tx.position.numpy()
+            pos = np.asarray(tx.position.numpy()).flatten()
             fig.add_trace(
                 go.Scatter3d(
                     x=[float(pos[0])],
@@ -964,7 +964,7 @@ def render_sionna_scene_plotly(
     for rx_name in rx_names_to_render:
         if rx_name in scene.receivers:
             rx = scene.receivers[rx_name]
-            pos = rx.position.numpy()
+            pos = np.asarray(rx.position.numpy()).flatten()
             fig.add_trace(
                 go.Scatter3d(
                     x=[float(pos[0])],
