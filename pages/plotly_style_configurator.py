@@ -6,7 +6,7 @@ from copy import deepcopy
 
 import plotly.express as px
 import streamlit as st
-from utils import unflatten_dict
+from utils import unflatten_dict, file_input
 
 # --- CONSTANTS & DEFAULTS ---
 FONTS = [
@@ -307,11 +307,13 @@ active_theme_name = st.sidebar.radio(
 active_theme_params = st.session_state.themes[active_theme_name]
 
 # Process uploaded pickle files
-pickle_files = st.sidebar.file_uploader(
-    "📂 Upload Plotly Figure Pickle Files",
+pickle_files = file_input(
+    "📂 Plotly Figure Pickle Files",
     type=["pickle", "pkl"],
     accept_multiple_files=True,
     key="pickle_uploader",
+    default_dir="output_data",
+    container=st.sidebar,
 )
 
 if pickle_files:
@@ -659,7 +661,12 @@ with st.sidebar:
             else:
                 _save_config(save_path)
 
-    uploaded_file = st.file_uploader("📂 Load Config File", type="json")
+    uploaded_file = file_input(
+        "📂 Load Config File",
+        type="json",
+        key="config_loader",
+        default_dir="configs/plotly",
+    )
     if uploaded_file and st.button(
         "Apply Loaded Config", width="stretch", type="primary"
     ):

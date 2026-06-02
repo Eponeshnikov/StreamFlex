@@ -80,9 +80,12 @@ if config and "categories" in config:
         st.error("The 'pages' directory was not found. Please ensure it exists.")
         files_in_pages = []
 
-    # Scan pages directory and assign files to categories
+    # Scan pages directory and assign files to categories. Files ending in
+    # `_worker.py` are import-only helpers that must live under pages/ (so
+    # multiprocessing can pickle them by qualified name) but are not pages —
+    # skip them so they don't show up as blank nav entries.
     for filename in sorted(files_in_pages):
-        if filename.endswith(".py"):
+        if filename.endswith(".py") and not filename.endswith("_worker.py"):
             page_path = f"pages/{filename}"
             page_title = format_title(filename)
 

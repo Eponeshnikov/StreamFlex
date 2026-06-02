@@ -2,13 +2,14 @@ import ast
 import hashlib
 
 # custom_plotter.py
+import io
 import json
 import numbers
 import os
 import pickle
 import sys
 from copy import deepcopy
-from typing import Type
+from typing import Literal, Type, cast, overload
 
 import numpy as np
 import plotly.graph_objects as go
@@ -67,6 +68,214 @@ def load_plot_config(config_name: str) -> dict:
             f"Could not parse `{config_path}`. Please ensure it is a valid JSON file."
         )
         return {"light": {}, "dark": {}}
+
+
+# --- FILE INPUT WIDGET (upload OR scan a server folder) ---
+
+
+class LocalFile(io.BytesIO):
+    """A file read from disk that mimics Streamlit's ``UploadedFile``.
+
+    It is a ``BytesIO`` subclass exposing ``.name``, ``.size`` and ``.type``,
+    so it is a drop-in for the objects returned by ``st.file_uploader`` and can
+    be passed directly to ``pd.read_csv``, ``json.load``, ``pickle.load`` etc.
+    """
+
+    def __init__(self, path: str):
+        with open(path, "rb") as fh:
+            data = fh.read()
+        super().__init__(data)
+        self.name = os.path.basename(path)
+        self.path = path
+        self.size = len(data)
+        self.type = ""
+
+    def getvalue(self) -> bytes:  # noqa: D401 - mirror UploadedFile API
+        return self.getbuffer().tobytes()
+
+    # Value-based identity so the object is stable across Streamlit reruns
+    # (e.g. the plugin ``create_widget`` state-diff and caching keys).
+    def __eq__(self, other) -> bool:
+        return isinstance(other, LocalFile) and other.path == self.path
+
+    def __hash__(self) -> int:
+        return hash(self.path)
+
+    def __reduce__(self):
+        return (self.__class__, (self.path,))
+
+    def __repr__(self) -> str:  # pragma: no cover - cosmetic
+        return f"LocalFile(name={self.name!r}, path={self.path!r})"
+
+
+def _scan_folder(
+    folder: str, exts: list[str] | None, recursive: bool
+) -> list[str]:
+    """Return sorted file paths in *folder* matching the given extensions."""
+    if not folder or not os.path.isdir(folder):
+        return []
+    if recursive:
+        candidates = (
+            os.path.join(root, name)
+            for root, _dirs, files in os.walk(folder)
+            for name in files
+        )
+    else:
+        candidates = (
+            os.path.join(folder, name) for name in os.listdir(folder)
+        )
+    out = []
+    for path in candidates:
+        if not os.path.isfile(path):
+            continue
+        if exts is None or os.path.splitext(path)[1].lower().lstrip(".") in exts:
+            out.append(path)
+    return sorted(out)
+
+
+@overload
+def file_input(
+    label: str,
+    type: str | list[str] | None = ...,
+    accept_multiple_files: Literal[False] = ...,
+    key: str | None = ...,
+    help: str | None = ...,
+    *,
+    default_dir: str = ...,
+    default_source: str = ...,
+    container=...,
+) -> "LocalFile | None": ...
+
+
+@overload
+def file_input(
+    label: str,
+    type: str | list[str] | None,
+    accept_multiple_files: Literal[True],
+    key: str | None = ...,
+    help: str | None = ...,
+    *,
+    default_dir: str = ...,
+    default_source: str = ...,
+    container=...,
+) -> "list[LocalFile]": ...
+
+
+def file_input(
+    label: str,
+    type: str | list[str] | None = None,
+    accept_multiple_files: bool = False,
+    key: str | None = None,
+    help: str | None = None,
+    *,
+    default_dir: str = ".",
+    default_source: str = "folder",
+    container=None,
+) -> "LocalFile | list[LocalFile] | None":
+    """Drop-in replacement for ``st.file_uploader`` with a server-folder mode.
+
+    A toggle switches between two sources:
+
+    * **Server folder** (default): a text input chooses a directory to scan and
+      a select/multiselect lists the matching files. Designed for running on a
+      remote server where uploading over a slow connection is impractical.
+    * **Browser upload**: the standard ``st.file_uploader``.
+
+    Return value matches ``st.file_uploader``: a single file-like object (or
+    ``None``) when ``accept_multiple_files`` is ``False``, otherwise a list.
+    Folder selections are returned as :class:`LocalFile` instances.
+
+    Args:
+        label: Label shown on the file selection widget.
+        type: Allowed extension(s) (string or list), e.g. ``"json"`` or
+            ``["pickle", "pkl"]``. ``None`` allows any file.
+        accept_multiple_files: Allow selecting more than one file.
+        key: Unique key prefix (REQUIRED) for widget state isolation.
+        help: Tooltip for the selection widget.
+        default_dir: Folder pre-filled in the scan path input.
+        default_source: ``"folder"`` (default) or ``"upload"``.
+        container: Streamlit container to render into (e.g. ``st.sidebar``).
+            Defaults to the top-level ``st``.
+    """
+    if key is None:
+        raise ValueError(
+            "file_input requires a unique 'key' to isolate widget state."
+        )
+    target = container if container is not None else st
+
+    # Normalise the type filter to a list of bare lowercase extensions.
+    exts: list[str] | None = None
+    if type is not None:
+        type_list = [type] if isinstance(type, str) else list(type)
+        exts = [t.lower().lstrip(".") for t in type_list]
+
+    use_upload = target.toggle(
+        "📤 Upload from browser instead",
+        value=(default_source == "upload"),
+        key=f"{key}__source_is_upload",
+        help="Off: pick files already present in a folder on the server. "
+        "On: upload from your local machine (slow over a poor connection).",
+    )
+
+    if use_upload:
+        return cast(
+            "LocalFile | list[LocalFile] | None",
+            target.file_uploader(
+                label,
+                type=type,
+                accept_multiple_files=accept_multiple_files,
+                key=f"{key}__uploader",
+                help=help,
+            ),
+        )
+
+    # --- Server-folder mode ---
+    cols = target.columns([4, 1])
+    folder = cols[0].text_input(
+        "📁 Server folder to scan",
+        value=default_dir,
+        key=f"{key}__folder",
+        help="Path on the server to search for files.",
+    )
+    recursive = cols[1].checkbox(
+        "Recursive",
+        value=False,
+        key=f"{key}__recursive",
+        help="Include files in sub-folders.",
+    )
+
+    matches = _scan_folder(folder, exts, recursive)
+    if not matches:
+        hint = f" matching {exts}" if exts else ""
+        target.info(f"No files{hint} found in `{folder or '∅'}`.")
+        return [] if accept_multiple_files else None
+
+    def _rel(path: str) -> str:
+        try:
+            return os.path.relpath(path, folder)
+        except ValueError:
+            return path
+
+    if accept_multiple_files:
+        chosen = target.multiselect(
+            label,
+            options=matches,
+            format_func=_rel,
+            key=f"{key}__multiselect",
+            help=help,
+        )
+        return [LocalFile(p) for p in chosen]
+
+    chosen = target.selectbox(
+        label,
+        options=matches,
+        format_func=_rel,
+        index=None,
+        placeholder="Select a file from the folder…",
+        key=f"{key}__selectbox",
+        help=help,
+    )
+    return LocalFile(chosen) if chosen else None
 
 
 # --- MAIN RENDERING FUNCTION ---

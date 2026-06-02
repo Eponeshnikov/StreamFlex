@@ -47,13 +47,19 @@ except ImportError:
     Width = Literal["stretch"]  # type: ignore[assignment, misc]
 
 try:
-    from utils import render_custom_plotly_chart
+    from utils import render_custom_plotly_chart, file_input  # type: ignore[assignment]
 except ImportError:
 
     def render_custom_plotly_chart(
         fig: go.Figure, width: Any = "stretch", key: str | None = None
     ) -> None:
         st.plotly_chart(fig, width=width)
+
+    def file_input(label: str, **kwargs):  # type: ignore[misc]
+        kwargs.pop("default_dir", None)
+        kwargs.pop("default_source", None)
+        kwargs.pop("container", None)
+        return st.file_uploader(label, **kwargs)
 
 
 # ── Aggregation helpers ──────────────────────────────────────────────────────
@@ -1200,20 +1206,22 @@ def main() -> None:
         "plots ([format docs](csv_plot_editor_format.md))."
     )
 
-    # 1. Upload CSVs
-    uploaded_csvs = st.file_uploader(
-        "Upload one or more sweep-result CSVs",
+    # 1. CSVs (upload or pick from a server folder)
+    uploaded_csvs = file_input(
+        "One or more sweep-result CSVs",
         type=["csv"],
         accept_multiple_files=True,
         key="csv_uploader",
+        default_dir="output_data",
     )
 
-    # 2. Upload JSON spec(s)
-    json_files = st.file_uploader(
-        "Upload JSON plot spec(s) (optional — enables auto-plot mode)",
+    # 2. JSON spec(s)
+    json_files = file_input(
+        "JSON plot spec(s) (optional — enables auto-plot mode)",
         type=["json"],
         accept_multiple_files=True,
         key="json_uploader",
+        default_dir="configs",
     )
 
     if not uploaded_csvs:

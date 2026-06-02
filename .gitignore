@@ -180,3 +180,4 @@ other_docs
 sionna-scenes
 *.json
 pages/key_generation
+pages/first_*
