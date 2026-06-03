@@ -553,6 +553,7 @@ with st.sidebar:
     # Get default values for height and width based on selected ratio
     default_height, default_width = dimension_options[selected_ratio]
 
+    scale_ratio = 1.0
     if selected_ratio == "Free" or selected_ratio == "Disable":
         chart_height = st.number_input(
             "Height (px)",
