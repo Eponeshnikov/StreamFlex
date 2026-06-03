@@ -1,0 +1,60 @@
+# Configuration for Streamlit Page Categories
+#
+# Each page file under pages/ is matched against the categories below, in
+# order, and assigned to the FIRST category whose rules pass. Pages that match
+# nothing fall back to the auto-created "Resources" category.
+#
+# rule types: startswith | contains | endswith
+# match:      'all' (every rule must pass) or 'any' (at least one rule passes)
+
+# Files under pages/ that are import-only modules (shared config/helpers) and
+# must NOT show up as navigation entries.
+exclude:
+  - "private_viz_configs.py"
+
+categories:
+  "First Component":
+    match: any
+    rules:
+      - type: contains
+        value: "first_component"
+
+  "Peaks":
+    match: any
+    rules:
+      - type: contains
+        value: "peak"
+
+  "Key Generation":
+    match: any
+    rules:
+      - type: contains
+        value: "key_generation"
+
+  "Scene & Materials":
+    match: any
+    rules:
+      - type: contains
+        value: "material"
+      - type: contains
+        value: "scene"
+      - type: contains
+        value: "position"
+
+  "CIR Analysis":
+    match: any
+    rules:
+      - type: contains
+        value: "cir"
+
+  "Visualization":
+    match: any
+    rules:
+      - type: contains
+        value: "plot"
+      - type: contains
+        value: "viz"
+      - type: contains
+        value: "csv"
+
+# Add more categories here as needed
