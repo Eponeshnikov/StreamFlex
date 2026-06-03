@@ -108,24 +108,19 @@ class LocalFile(io.BytesIO):
         return f"LocalFile(name={self.name!r}, path={self.path!r})"
 
 
-def _scan_folder(
-    folder: str, exts: list[str] | None, recursive: bool
-) -> list[str]:
-    """Return sorted file paths in *folder* matching the given extensions."""
-    if not folder or not os.path.isdir(folder):
+def _scan_folder(folder: str, exts: list[str] | None) -> list[str]:
+    """Return sorted file paths directly inside *folder* matching the extensions.
+
+    Only the top level of *folder* is scanned (no recursion). A missing folder
+    is created so the expected data location always exists for the user to fill.
+    """
+    if not folder:
         return []
-    if recursive:
-        candidates = (
-            os.path.join(root, name)
-            for root, _dirs, files in os.walk(folder)
-            for name in files
-        )
-    else:
-        candidates = (
-            os.path.join(folder, name) for name in os.listdir(folder)
-        )
+    # Make sure the data directory exists; create it if it doesn't.
+    os.makedirs(folder, exist_ok=True)
     out = []
-    for path in candidates:
+    for name in os.listdir(folder):
+        path = os.path.join(folder, name)
         if not os.path.isfile(path):
             continue
         if exts is None or os.path.splitext(path)[1].lower().lstrip(".") in exts:
@@ -230,21 +225,14 @@ def file_input(
         )
 
     # --- Server-folder mode ---
-    cols = target.columns([4, 1])
-    folder = cols[0].text_input(
+    folder = target.text_input(
         "📁 Server folder to scan",
         value=default_dir,
         key=f"{key}__folder",
-        help="Path on the server to search for files.",
-    )
-    recursive = cols[1].checkbox(
-        "Recursive",
-        value=False,
-        key=f"{key}__recursive",
-        help="Include files in sub-folders.",
+        help="Path on the server to search for files (this folder only).",
     )
 
-    matches = _scan_folder(folder, exts, recursive)
+    matches = _scan_folder(folder, exts)
     if not matches:
         hint = f" matching {exts}" if exts else ""
         target.info(f"No files{hint} found in `{folder or '∅'}`.")
@@ -551,6 +539,10 @@ def read_data(
                 dtype=dtype,
                 mode="r",
                 shape=shape,
+            )
+        else:
+            raise ValueError(
+                f"Unsupported file extension for '{data}'; expected .pickle or .bin"
             )
     else:
         readed_data = data  # 7D np.ndarray
