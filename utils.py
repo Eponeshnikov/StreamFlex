@@ -1068,18 +1068,23 @@ def render_sionna_scene_plotly(
     rm_colorscale="Viridis",
     rm_show_colorbar=True,
     rm_opacity=0.8,
+    color_paths_by_segment=False,
+    show_segment_toggle=True,
+    widget_key="scene",
 ) -> go.Figure:
     """
     Render a Sionna scene using Plotly in Streamlit.
     """
     fig = go.Figure()
 
+    # Match Sionna's own path palette exactly
+    # (sionna.rt.constants: LOS/SPECULAR/DIFFUSE/REFRACTION/DIFFRACTION_COLOR).
     path_colors = {
-        "los": "gray",
-        "specular": "cornflowerblue",
-        "diffuse": "darkseagreen",
-        "refraction": "lightcoral",
-        "diffraction": "blueviolet",
+        "los": "rgb(128,128,128)",  # (0.5, 0.5, 0.5)
+        "specular": "rgb(153,153,255)",  # (0.6, 0.6, 1.0)
+        "diffuse": "rgb(153,255,153)",  # (0.6, 1.0, 0.6)
+        "refraction": "rgb(255,153,153)",  # (1.0, 0.6, 0.6)
+        "diffraction": "rgb(153,0,153)",  # (0.6, 0.0, 0.6)
     }
     path_widths = {"los": 4}
 
@@ -1181,6 +1186,25 @@ def render_sionna_scene_plotly(
             )
 
     if show_paths and paths is not None:
+        # The per-segment coloring toggle lives here so every caller exposes it
+        # consistently without re-implementing the widget. Callers rendering
+        # more than one figure must pass distinct ``widget_key`` values.
+        if show_segment_toggle:
+            try:
+                color_paths_by_segment = st.checkbox(
+                    "Per-segment path colors (Sionna style)",
+                    value=color_paths_by_segment,
+                    key=f"{widget_key}_color_paths_by_segment",
+                    help=(
+                        "Color each path segment individually like Sionna: the "
+                        "incident segment (TX -> first interaction) is gray "
+                        "(LoS), each later segment takes its interaction color. "
+                        "Off = whole path colored by its first interaction type."
+                    ),
+                )
+            except Exception:
+                pass
+
         add_paths_to_figure(
             fig,
             scene,
@@ -1195,6 +1219,7 @@ def render_sionna_scene_plotly(
             diffuse_opacity,
             refraction_opacity,
             diffraction_opacity,
+            color_paths_by_segment,
         )
 
     fig.update_layout(
@@ -1228,11 +1253,39 @@ def add_paths_to_figure(
     diffuse_opacity=None,
     refraction_opacity=None,
     diffraction_opacity=None,
+    color_paths_by_segment=False,
 ):
     """
     Add propagation paths to the Plotly figure.
+
+    color_paths_by_segment:
+        If False (default), each path is drawn as a single trace colored by
+        its first interaction type. If True, each path is split into segments
+        colored individually like Sionna's own renderer: the incident segment
+        (TX -> first interaction) is gray (LoS color) and every subsequent
+        segment takes the color of the interaction it leaves.
     """
     added_to_legend = set()
+
+    opacity_map = {
+        "specular": specular_opacity,
+        "diffuse": diffuse_opacity,
+        "refraction": refraction_opacity,
+        "diffraction": diffraction_opacity,
+    }
+
+    def _segment_opacity(seg_type, is_true_los, path_primary_type):
+        # Only a genuine LoS ray (TX -> RX, no interactions) stays fully opaque.
+        # Every other segment -- including the gray *incident* segment of a
+        # reflected path -- is subject to the transparency controls.
+        if is_true_los:
+            return 1.0
+        if global_path_opacity is not None:
+            return global_path_opacity
+        # In per-type mode the gray incident segment has no slider of its own,
+        # so it follows its path's primary interaction opacity.
+        eff_type = seg_type if seg_type != "los" else path_primary_type
+        return opacity_map.get(eff_type, 1.0)
 
     try:
         vertices_np = paths.vertices.numpy()
@@ -1271,7 +1324,27 @@ def add_paths_to_figure(
                     if not is_valid:
                         continue
 
+                    source_pos = source_positions_np[
+                        tx_idx * scene.tx_array.array_size
+                    ]
+                    target_pos = target_positions_np[
+                        rx_idx * scene.rx_array.array_size
+                    ]
+
+                    # Build the polyline source -> interaction vertices -> target.
+                    #
+                    # Interaction vertices are selected using the `interactions`
+                    # array (InteractionType.NONE == 0 marks "no interaction"),
+                    # NOT by testing the vertex coordinates. A genuine interaction
+                    # point can legitimately lie at the origin (0,0,0), and depths
+                    # past the last interaction carry leftover non-zero garbage,
+                    # so a value-based test both drops real vertices and keeps
+                    # spurious ones. This mirrors Sionna's own renderer
+                    # (sionna.rt.preview.Previewer.plot_paths), which breaks at
+                    # the first NONE interaction.
                     path_type = "los"
+                    path_coords = [source_pos]
+                    vertex_types = []  # interaction type at each vertex
                     for depth in range(max_depth):
                         interaction = int(
                             interactions_np[
@@ -1282,77 +1355,88 @@ def add_paths_to_figure(
                                 depth, rx_idx, tx_idx, path_idx
                             ]
                         )
-                        if interaction != 0:
-                            path_type = get_path_type_name(interaction)
+                        if interaction == 0:  # InteractionType.NONE
                             break
-
-                    color = path_colors.get(path_type, "gray")
-                    width = path_widths.get(path_type, 1)
-
-                    source_pos = source_positions_np[
-                        tx_idx * scene.tx_array.array_size
-                    ]
-                    target_pos = target_positions_np[
-                        rx_idx * scene.rx_array.array_size
-                    ]
-
-                    path_coords = [source_pos]
-                    for depth in range(max_depth):
+                        type_name = get_path_type_name(interaction)
+                        if path_type == "los":
+                            path_type = type_name
                         vertex = (
                             vertices_np[depth, rx_idx, 0, tx_idx, 0, path_idx]
                             if not is_synthetic
                             else vertices_np[depth, rx_idx, tx_idx, path_idx]
                         )
-                        if np.any(vertex != 0):
-                            path_coords.append(vertex)
+                        path_coords.append(vertex)
+                        vertex_types.append(type_name)
                     path_coords.append(target_pos)
 
-                    path_x, path_y, path_z = zip(
-                        *[p.tolist() for p in path_coords]
-                    )
-                    if (
-                        len(path_x) > 2
-                    ):  # Has intermediate vertices beyond the TX position
-                        path_x, path_y, path_z = (
-                            path_x[:-2] + (path_x[-1],),
-                            path_y[:-2] + (path_y[-1],),
-                            path_z[:-2] + (path_z[-1],),
+                    coords = [np.asarray(p).tolist() for p in path_coords]
+                    # Only a true LoS ray (TX -> RX with no interactions) is
+                    # drawn thick. Gray *incident* segments of reflected paths
+                    # use the normal width, like every other interaction.
+                    is_true_los = len(vertex_types) == 0
+                    width = path_widths.get("los", 4) if is_true_los else 1
+
+                    if not color_paths_by_segment:
+                        # One trace per path, colored by its first interaction.
+                        path_x, path_y, path_z = zip(*coords)
+                        show_in_legend = show_legend and (
+                            path_type not in added_to_legend
                         )
-
-                    show_in_legend = show_legend and (
-                        path_type not in added_to_legend
-                    )
-                    if show_in_legend:
-                        added_to_legend.add(path_type)
-
-                    opacity_map = {
-                        "specular": specular_opacity,
-                        "diffuse": diffuse_opacity,
-                        "refraction": refraction_opacity,
-                        "diffraction": diffraction_opacity,
-                    }
-                    path_opacity = (
-                        global_path_opacity
-                        if global_path_opacity is not None
-                        else opacity_map.get(path_type, 1.0)
-                    )
-                    if path_type == "los":
-                        path_opacity = 1.0
-
-                    fig.add_trace(
-                        go.Scatter3d(
-                            x=path_x,
-                            y=path_y,
-                            z=path_z,
-                            mode="lines",
-                            line=dict(color=color, width=width),
-                            opacity=path_opacity,
-                            name=path_type.replace("_", " ").title(),
-                            showlegend=show_in_legend,
-                            legendgroup=f"paths_{path_type}",
-                            hoverinfo="name",
+                        if show_in_legend:
+                            added_to_legend.add(path_type)
+                        fig.add_trace(
+                            go.Scatter3d(
+                                x=path_x,
+                                y=path_y,
+                                z=path_z,
+                                mode="lines",
+                                line=dict(
+                                    color=path_colors.get(path_type, "gray"),
+                                    width=width,
+                                ),
+                                opacity=_segment_opacity(
+                                    path_type, is_true_los, path_type
+                                ),
+                                name=path_type.replace("_", " ").title(),
+                                showlegend=show_in_legend,
+                                legendgroup=f"paths_{path_type}",
+                                hoverinfo="name",
+                            )
                         )
-                    )
+                    else:
+                        # One trace per segment, colored like Sionna: the
+                        # incident segment (TX -> first vertex) is LoS-gray,
+                        # each later segment takes the type of its start vertex.
+                        seg_types = ["los"] + vertex_types
+                        for j, seg_type in enumerate(seg_types):
+                            seg = coords[j : j + 2]
+                            seg_x, seg_y, seg_z = zip(*seg)
+                            show_in_legend = show_legend and (
+                                seg_type not in added_to_legend
+                            )
+                            if show_in_legend:
+                                added_to_legend.add(seg_type)
+                            fig.add_trace(
+                                go.Scatter3d(
+                                    x=seg_x,
+                                    y=seg_y,
+                                    z=seg_z,
+                                    mode="lines",
+                                    line=dict(
+                                        color=path_colors.get(
+                                            seg_type, "gray"
+                                        ),
+                                        width=width,
+                                    ),
+                                    opacity=_segment_opacity(
+                                        seg_type, is_true_los, path_type
+                                    ),
+                                    name=seg_type.replace("_", " ").title(),
+                                    showlegend=show_in_legend,
+                                    legendgroup=f"paths_{seg_type}",
+                                    hoverinfo="name",
+                                )
+                            )
     except Exception as e:
         st.error(f"Could not render paths: {str(e)}")
         st.code(traceback.format_exc())
