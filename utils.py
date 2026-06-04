@@ -879,6 +879,14 @@ def radio_map_to_numpy(radio_map, metric, tx_idx, db_scale):
     return data_np
 
 
+# Max radiomap cells per axis sent to Plotly. A go.Surface / Mesh3d with
+# millions of cells (small cell_size + large area) serializes a huge JSON
+# payload and hangs/crashes the browser's WebGL renderer. We decimate the
+# *display* grid above this cap; the full-resolution map is still used for
+# RX sampling and metrics — only the on-screen trace is coarsened.
+MAX_RADIOMAP_CELLS_PER_AXIS = 400
+
+
 def add_planar_radiomap_to_figure(
     fig,
     radio_map,
@@ -899,6 +907,15 @@ def add_planar_radiomap_to_figure(
 
     data_np = radio_map_to_numpy(radio_map, metric, tx_idx, db_scale)
     num_cells_y, num_cells_x = data_np.shape
+
+    # Decimate the display grid so the browser can render it (see the
+    # MAX_RADIOMAP_CELLS_PER_AXIS note). Strided slicing keeps the full
+    # spatial extent; only the on-screen resolution is reduced.
+    step_y = max(1, int(np.ceil(num_cells_y / MAX_RADIOMAP_CELLS_PER_AXIS)))
+    step_x = max(1, int(np.ceil(num_cells_x / MAX_RADIOMAP_CELLS_PER_AXIS)))
+    if step_x > 1 or step_y > 1:
+        data_np = data_np[::step_y, ::step_x]
+        num_cells_y, num_cells_x = data_np.shape
 
     try:
         bbox = radio_map.measurement_surface.bbox()
@@ -998,15 +1015,17 @@ def add_mesh_radiomap_to_figure(
     else:
         colorbar_title = metric.upper()
 
-    # Map per-triangle data to per-vertex data for smooth shading
+    # Map per-triangle data to per-vertex data for smooth shading.
+    # Vectorized scatter-add (np.add.at handles repeated vertex indices)
+    # replaces a Python double loop that was O(faces) and stalled on fine
+    # meshes.
     num_vertices = len(x)
     vertex_values = np.zeros(num_vertices)
     vertex_counts = np.zeros(num_vertices)
 
-    for face_idx in range(len(i)):
-        for vertex_idx in [i[face_idx], j[face_idx], k[face_idx]]:
-            vertex_values[vertex_idx] += data_np[face_idx]
-            vertex_counts[vertex_idx] += 1
+    for idx in (i, j, k):
+        np.add.at(vertex_values, idx, data_np)
+        np.add.at(vertex_counts, idx, 1)
 
     vertex_values = np.divide(
         vertex_values,
