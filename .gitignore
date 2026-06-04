@@ -165,7 +165,10 @@ plugins/
 logs/
 # VSCode
 .vscode/
-output_data*
+# Ignore output_data contents but keep the directory skeleton (.gitkeep markers)
+/output_data/**
+!/output_data/**/
+!/output_data/**/.gitkeep
 .lingma/
 .kilocode/
 analytics
