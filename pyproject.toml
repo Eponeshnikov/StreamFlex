@@ -9,6 +9,7 @@ dependencies = [
     "importlib>=1.0.4",
     "kaleido>=1.2.0",
     "loguru>=0.7.3",
+    "optuna>=4.9.0",
     "orjson>=3.11.0",
     "psutil>=7.0.0",
     "streamlit>=1.44",
