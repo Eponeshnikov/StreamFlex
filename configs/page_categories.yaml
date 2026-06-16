@@ -10,6 +10,11 @@
 # Files under pages/ that are import-only modules (shared config/helpers) and
 # must NOT show up as navigation entries.
 exclude:
+  - "filter_specs.py"
+  - "first_component_eval.py"
+  - "first_component_worker.py"
+  - "peak_windows.py"
+  - "peaks_processing_worker.py"
   - "private_viz_configs.py"
 
 categories:
@@ -50,6 +55,10 @@ categories:
   "Visualization":
     match: any
     rules:
+      - type: contains
+        value: "csv_plot"
+      - type: contains
+        value: "plotly_style"
       - type: contains
         value: "plot"
       - type: contains
