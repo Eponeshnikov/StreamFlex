@@ -1,2 +1,6 @@
 [server]
 maxUploadSize = 250
+
+[client]
+# Показывать пункты "Clear cache"/"Rerun" в меню даже при доступе не с localhost
+toolbarMode = "developer"
