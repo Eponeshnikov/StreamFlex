@@ -31,12 +31,13 @@ Generate publication-ready plots from CSV data by describing them in JSON.
 |---|---|---|---|
 | `id` | string | yes | Unique identifier (used as widget key and filename on export). |
 | `title` | string | yes | Chart title. |
-| `chart_type` | string | yes | One of: `line`, `bar`, `grouped_bar`, `stacked_bar`, `stacked_area`, `heatmap`. |
+| `chart_type` | string | yes | One of: `line`, `bar`, `grouped_bar`, `stacked_bar`, `stacked_area`, `heatmap`, `surface3d`. |
 | `source` | string | no | CSV filename to use. Omit to combine all uploaded CSVs. |
 | `extract_columns` | array | no | Extract new columns from text via regex or Key:Value splitting. |
 | `computed_columns` | array | no | Derive columns using pandas expressions. |
 | `filters` | object | no | Keep only rows matching allowed values. |
 | `x` | object | yes | X-axis configuration. |
+| `surface_y` / `axis_y` | object | only for `surface3d` | Second horizontal axis for 3D surface plots. Same fields as `x`. |
 | `y` | object | yes | Y-axis configuration. |
 | `group` | object | no | Split data into separate traces. |
 | `aggregate` | object | no | Collapse rows sharing the same (x, group) pair. |
@@ -45,6 +46,7 @@ Generate publication-ready plots from CSV data by describing them in JSON.
 | `y_scale` | string | no | Y-axis scale type: `"linear"` (default) or `"log"`. |
 | `layout` | object | no | Plotly layout overrides (passed directly to `fig.update_layout`). |
 | `line_dash` | string or object | no | Line style for line/area charts. See [Line Dash](#line-dash-line_dash). |
+| `error_band` | bool | no | Line charts only: render error bars as a filled ±band instead of whiskers. See [Error Band](#error-band-error_band). |
 | `opacity` | number | no | Trace opacity, `0.0` (transparent) to `1.0` (opaque). Applies to all chart types. |
 | `show_table` | bool | no | Show an expandable data table under the plot. |
 | `note` | string | no | Caption displayed below the chart. |
@@ -262,6 +264,9 @@ Post-aggregation transformations applied at step 7. Multiple transforms can be c
 | `normalize_ref_column` | string | Reference column for distribution normalization. Each column is divided by this column's total. |
 | `normalize_columns` | array | Which Y columns to normalize (defaults to all `y.columns`). |
 | `normalize_group_peak` | bool | Scale each group so its peak Y value equals 100%. Makes groups directly comparable by shape. |
+| `diff` | bool | Replace each Y column by its discrete difference along sorted X (per group). Turns a cumulative curve into per-step increments. See below. |
+| `diff_scale` | number | Multiplier applied to the differenced values (e.g. `100` for percent). Default `1`. |
+| `diff_drop_first` | bool | After `diff`, drop the first (baseline) X-point of each group. Use when the baseline value is an anchor that would exceed a valid range (e.g. a share > 100%). Default `false`. |
 
 ### `normalize` (row-wise, for stacked charts)
 
@@ -299,6 +304,34 @@ When no `group` column is present, the entire dataset is scaled by its global pe
   "normalize_ref_column": "True Ray Power in Bin",
   "normalize_group_peak": true
 }
+```
+
+### `diff` (per-step increments)
+
+Replaces each Y column by its discrete difference along the **sorted X axis**,
+computed independently within each `group`. The first X-point of every group
+keeps its original (undifferenced) value as a baseline anchor. Runs after
+aggregation, so it differences the aggregated curve.
+
+Use it to turn a cumulative quantity into its increment — e.g. a curve of
+"mean recognised components vs analysis depth N" becomes "extra components gained
+at each N", which (for steps that add at most one item) approximates the share of
+samples that reach depth N. Combine with `diff_scale: 100` to read the result as
+a percentage.
+
+```json
+"aggregate": {"func": "mean"},
+"transform": {"diff": true, "diff_scale": 100}
+```
+
+Note: keep the first X value (e.g. `N = 1`) inside `x.values` — the difference at
+the second point needs it. The baseline point itself may exceed 100 after scaling
+and is not a percentage. Set `diff_drop_first: true` to remove it so the displayed
+curve stays within a valid range (the baseline is still used to compute the second
+point's increment, then dropped).
+
+```json
+"transform": {"diff": true, "diff_scale": 100, "diff_drop_first": true}
 ```
 
 ---
@@ -345,6 +378,33 @@ Unmapped traces default to `"solid"`.
 
 ---
 
+## Error Band (`error_band`)
+
+For `line` charts, render the error from `aggregate.error_bars` as a translucent
+filled region (mean ± error) instead of per-point whisker bars. This reads much
+cleaner for publication figures, especially when several traces overlap or the
+spread is large. Each trace's band is drawn in its own colour (taken from the
+`layout.colorway`, falling back to the default palette), and the central line is
+drawn solid on top.
+
+Requires `aggregate.error_bars` to be set (`std`, `sem`, `minmax`, or `q25_q75`);
+without it there is nothing to shade and only the line is drawn. Ignored by all
+non-line chart types.
+
+```json
+"aggregate": {"func": "mean", "error_bars": "sem"},
+"error_band": true,
+"layout": {"colorway": ["#2f6f9f", "#c44e52"]}
+```
+
+Tip: prefer `sem` over `std` for the band when comparing a few aggregated
+traces — `std` shows the full condition-to-condition spread (often huge), while
+`sem` shows the uncertainty of the mean. To remove a large spread entirely,
+*facet* it onto separate lines (e.g. one line per SNR or per scene via `group`)
+rather than averaging everything into one wide band.
+
+---
+
 ## Opacity (`opacity`)
 
 Trace opacity from `0.0` (fully transparent) to `1.0` (fully opaque). Applies to all chart types.
@@ -383,6 +443,22 @@ Config 1 | SNR:-10 | Scene:florence | Logic:Logic 3 | Model:RT
 ```json
 {
   "plots": [
+    {
+      "id": "surface_snr_topn",
+      "title": "Energy completeness over SNR and Top-N",
+      "chart_type": "surface3d",
+      "extract_columns": [
+        {"source": "config", "auto_kv": true}
+      ],
+      "filters": {"Model": ["RT"]},
+      "x": {"column": "Top-N Peaks", "label": "Top-N"},
+      "surface_y": {"column": "SNR", "label": "SNR (dB)"},
+      "y": {
+        "columns": ["Percent of Total Signal Power in TP"],
+        "label": "Energy completeness (%)"
+      },
+      "aggregate": {"func": "mean"}
+    },
     {
       "id": "accuracy_vs_snr",
       "title": "Accuracy vs SNR by Model",

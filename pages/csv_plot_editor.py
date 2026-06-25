@@ -340,6 +340,52 @@ def _normalize_group_peak(
     return df
 
 
+def _apply_group_diff(
+    df: pd.DataFrame,
+    y_columns: list[str],
+    x_col: str,
+    group_column: str | None = None,
+    scale: float = 1.0,
+    drop_first: bool = False,
+) -> pd.DataFrame:
+    """Replace each Y column by its discrete difference along sorted *x_col*.
+
+    Computed independently within each group (sorted by x).  The first x-point
+    of every group keeps its original (undifferenced) value as the baseline.
+    Useful to turn a cumulative curve (e.g. mean recognised components vs N)
+    into its per-step increment (e.g. share of CIRs that gain an N-th
+    component).  ``scale`` multiplies the result (use ``100`` for percent).
+    """
+    existing = [c for c in y_columns if c in df.columns]
+    if not existing:
+        return df
+    df = df.copy()
+
+    if group_column and group_column in df.columns:
+        groups = list(df.groupby(group_column, observed=True).groups.values())
+    else:
+        groups = [df.index]
+
+    first_rows: list[Any] = []
+    for idx in groups:
+        # Order this group's rows by x, then take the discrete difference,
+        # keeping the first point as its original (baseline) value.
+        order = df.loc[idx].sort_values(x_col).index
+        if len(order):
+            first_rows.append(order[0])
+        for c in existing:
+            vals = df.loc[order, c]
+            d = vals.diff()
+            if len(d):
+                d.iloc[0] = vals.iloc[0]
+            df.loc[order, c] = d.to_numpy() * scale
+    if drop_first and first_rows:
+        # The baseline point is only needed to difference the second point;
+        # drop it so the curve shows true increments (e.g. a proper ≤100% share).
+        df = df.drop(index=first_rows)
+    return df
+
+
 # ── Chart builders ───────────────────────────────────────────────────────────
 
 CHART_TYPES: list[str] = [
@@ -349,6 +395,7 @@ CHART_TYPES: list[str] = [
     "Stacked Bar",
     "Stacked Area",
     "Heatmap",
+    "3D Surface",
 ]
 
 _CHART_TYPE_MAP: dict[str, str] = {
@@ -358,6 +405,8 @@ _CHART_TYPE_MAP: dict[str, str] = {
     "stacked_bar": "Stacked Bar",
     "stacked_area": "Stacked Area",
     "heatmap": "Heatmap",
+    "surface3d": "3D Surface",
+    "surface_3d": "3D Surface",
 }
 
 
@@ -375,6 +424,47 @@ def _get_error_arrays(df: pd.DataFrame, y_col: str) -> dict[str, Any] | None:
             arrayminus=df[asym_minus].tolist(),
             visible=True,
         )
+    return None
+
+
+_DEFAULT_COLORWAY: list[str] = [
+    "#1f77b4",
+    "#ff7f0e",
+    "#2ca02c",
+    "#d62728",
+    "#9467bd",
+    "#8c564b",
+    "#e377c2",
+    "#7f7f7f",
+    "#bcbd22",
+    "#17becf",
+]
+
+
+def _hex_to_rgba(color: str, alpha: float) -> str:
+    """Convert ``#rrggbb`` (or an ``rgb(...)`` string) to an ``rgba(...)`` string."""
+    c = color.strip()
+    if c.startswith("#") and len(c) == 7:
+        r, g, b = (int(c[i : i + 2], 16) for i in (1, 3, 5))
+        return f"rgba({r}, {g}, {b}, {alpha})"
+    if c.startswith("rgb(") and c.endswith(")"):
+        return f"rgba({c[4:-1]}, {alpha})"
+    if c.startswith("rgba("):
+        return c
+    # Fallback: a neutral translucent grey
+    return f"rgba(127, 127, 127, {alpha})"
+
+
+def _err_bounds(df: pd.DataFrame, y_col: str) -> tuple[Any, Any] | None:
+    """Return (upper, lower) Series for a confidence band, or None if no error data."""
+    y = df[y_col]
+    sym = f"{y_col}__err"
+    plus = f"{y_col}__err_plus"
+    minus = f"{y_col}__err_minus"
+    if sym in df.columns:
+        return y + df[sym], y - df[sym]
+    if plus in df.columns and minus in df.columns:
+        return y + df[plus], y - df[minus]
     return None
 
 
@@ -414,18 +504,56 @@ def _build_line(
     *,
     line_dash: str | dict[str, str] | None = None,
     opacity: float | None = None,
+    error_band: bool = False,
+    colorway: list[str] | None = None,
 ) -> None:
+    palette = colorway or _DEFAULT_COLORWAY
     for idx, cfg in enumerate(df["config"].unique()):
         sub = df[df["config"] == cfg].sort_values(x_col)
         dash = _resolve_dash(cfg, idx, line_dash)
+        color = palette[idx % len(palette)]
+
+        bounds = _err_bounds(sub, y_col) if error_band else None
+        if bounds is not None:
+            upper, lower = bounds
+            # Upper edge (invisible), then lower edge filled up to it.
+            fig.add_trace(
+                go.Scatter(
+                    x=sub[x_col],
+                    y=upper,
+                    mode="lines",
+                    line=dict(width=0),
+                    hoverinfo="skip",
+                    showlegend=False,
+                    name=f"{cfg} +",
+                )
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=sub[x_col],
+                    y=lower,
+                    mode="lines",
+                    line=dict(width=0),
+                    fill="tonexty",
+                    fillcolor=_hex_to_rgba(color, 0.18),
+                    hoverinfo="skip",
+                    showlegend=False,
+                    name=f"{cfg} -",
+                )
+            )
+
         trace_kw: dict[str, Any] = dict(
             x=sub[x_col],
             y=sub[y_col],
             mode="lines+markers",
             name=str(cfg),
-            error_y=_get_error_arrays(sub, y_col),
             line=dict(dash=dash),
         )
+        if error_band:
+            # Band already shows the spread; keep the line clean.
+            trace_kw["line"]["color"] = color
+        else:
+            trace_kw["error_y"] = _get_error_arrays(sub, y_col)
         if opacity is not None:
             trace_kw["opacity"] = opacity
         fig.add_trace(go.Scatter(**trace_kw))
@@ -522,6 +650,19 @@ def _build_stacked_area(
         fig.add_trace(go.Scatter(**trace_kw))
 
 
+def _natural_sort_key(value: Any) -> tuple[int, float, str]:
+    """Sort key that orders by an embedded number when present, else by text.
+
+    Keeps ``N = 2`` before ``N = 10`` and ``-10`` before ``-5`` rather than the
+    lexicographic order ``pivot_table`` would otherwise impose.
+    """
+    s = str(value)
+    m = re.search(r"-?\d+(?:\.\d+)?", s.replace("−", "-"))
+    if m:
+        return (0, float(m.group()), s)
+    return (1, 0.0, s)
+
+
 def _build_heatmap(
     fig: go.Figure,
     df: pd.DataFrame,
@@ -533,6 +674,10 @@ def _build_heatmap(
 ) -> None:
     piv = df.pivot_table(
         index="config", columns=x_col, values=y_col, aggfunc="mean"
+    )
+    piv = piv.reindex(
+        index=sorted(piv.index, key=_natural_sort_key),
+        columns=sorted(piv.columns, key=_natural_sort_key),
     )
     z_vals = piv.to_numpy()
     fig.add_trace(
@@ -547,6 +692,51 @@ def _build_heatmap(
     )
 
 
+def _build_surface3d(
+    fig: go.Figure,
+    df: pd.DataFrame,
+    x_col: str,
+    y_col: str,
+    *,
+    surface_axis_col: str | None = None,
+    line_dash: str | dict[str, str] | None = None,
+    opacity: float | None = None,
+) -> None:
+    if surface_axis_col is None or surface_axis_col not in df.columns:
+        return
+
+    for cfg in df["config"].unique():
+        sub = df[df["config"] == cfg]
+        piv = sub.pivot_table(
+            index=surface_axis_col,
+            columns=x_col,
+            values=y_col,
+            aggfunc="mean",
+            observed=True,
+        ).sort_index()
+        if piv.empty:
+            continue
+        trace_kw: dict[str, Any] = dict(
+            z=piv.to_numpy(),
+            x=list(piv.columns),
+            y=list(piv.index),
+            name=str(cfg),
+            showscale=True,
+            colorbar=dict(title=str(cfg)),
+            contours={
+                "z": {
+                    "show": True,
+                    "usecolormap": True,
+                    "highlightcolor": "#333333",
+                    "project_z": True,
+                }
+            },
+        )
+        if opacity is not None:
+            trace_kw["opacity"] = opacity
+        fig.add_trace(go.Surface(**trace_kw))
+
+
 _BUILDERS: dict[str, Any] = {
     "Line": _build_line,
     "Bar": _build_bar,
@@ -554,6 +744,7 @@ _BUILDERS: dict[str, Any] = {
     "Stacked Bar": _build_stacked_bar,
     "Stacked Area": _build_stacked_area,
     "Heatmap": _build_heatmap,
+    "3D Surface": _build_surface3d,
 }
 
 
@@ -640,7 +831,11 @@ def _resolve_group(
 
 
 def _auto_dedup(
-    df: pd.DataFrame, x_col: str, y_col: str, plot_id: str
+    df: pd.DataFrame,
+    x_col: str,
+    y_col: str,
+    plot_id: str,
+    extra_key_cols: list[str] | None = None,
 ) -> pd.DataFrame:
     """
     Step 8: If multiple rows share the same (config, x) pair, collapse them
@@ -649,28 +844,33 @@ def _auto_dedup(
     if "config" not in df.columns or x_col not in df.columns:
         return df
 
-    dup_count = df.groupby(["config", x_col], observed=True).size()
+    group_keys = ["config", x_col]
+    for col in extra_key_cols or []:
+        if col in df.columns and col not in group_keys:
+            group_keys.append(col)
+
+    dup_count = df.groupby(group_keys, observed=True).size()
     if (dup_count > 1).any():
         max_dups = int(dup_count.max())
         st.caption(
-            f"⚠️ [{plot_id}] Up to {max_dups} rows per (config, x) — "
+            f"⚠️ [{plot_id}] Up to {max_dups} rows per plot key — "
             f'auto-averaging.  Add `"aggregate"` to spec to control this.'
         )
         # Identify all numeric columns to aggregate
         numeric_cols = df.select_dtypes(include="number").columns.tolist()
-        value_cols = [c for c in numeric_cols if c != x_col]
+        value_cols = [c for c in numeric_cols if c not in group_keys]
         if value_cols:
             agg_dict: dict[str, str] = {c: "mean" for c in value_cols}
             # Keep first value for non-numeric columns
             non_numeric = [
                 c
                 for c in df.columns
-                if c not in numeric_cols and c not in ["config", x_col]
+                if c not in numeric_cols and c not in group_keys
             ]
             for c in non_numeric:
                 agg_dict[c] = "first"
             df = (
-                df.groupby(["config", x_col], observed=True)
+                df.groupby(group_keys, observed=True)
                 .agg(agg_dict)
                 .reset_index()
             )
@@ -773,11 +973,22 @@ def _render_json_plot(
         df = _apply_filters(df, filters)
 
     x_cfg: dict[str, Any] = plot_spec["x"]
+    surface_axis_cfg: dict[str, Any] | None = (
+        plot_spec.get("surface_y") or plot_spec.get("axis_y")
+    )
     y_cfg: dict[str, Any] = plot_spec["y"]
     group_cfg: dict[str, Any] | None = plot_spec.get("group")
     agg_cfg: dict[str, Any] = plot_spec.get("aggregate", {})
     x_col: str = x_cfg["column"]
+    surface_axis_col: str | None = (
+        surface_axis_cfg.get("column") if surface_axis_cfg else None
+    )
     x_label: str = x_cfg.get("label", x_col)
+    surface_axis_label: str | None = (
+        surface_axis_cfg.get("label", surface_axis_col)
+        if surface_axis_cfg
+        else None
+    )
     y_columns: list[str] = y_cfg.get("columns", [])
     y_label: str = y_cfg.get("label", y_columns[0] if y_columns else "Value")
     y_rename: dict[str, str] = y_cfg.get("rename", {})
@@ -785,6 +996,18 @@ def _render_json_plot(
     if x_col not in df.columns:
         st.warning(f"[{plot_id}] Column `{x_col}` not found in CSV.")
         return None
+    if chart_type == "3D Surface":
+        if not surface_axis_cfg or not surface_axis_col:
+            st.warning(
+                f"[{plot_id}] 3D Surface requires `surface_y` "
+                f'or `axis_y` with a `column` field.'
+            )
+            return None
+        if surface_axis_col not in df.columns:
+            st.warning(
+                f"[{plot_id}] Column `{surface_axis_col}` not found in CSV."
+            )
+            return None
 
     # Check that at least some y columns exist
     missing_y = [c for c in y_columns if c not in df.columns]
@@ -799,6 +1022,8 @@ def _render_json_plot(
 
     # ── 4. X-values filter (rows only, no formatting) ────────────────
     df = _filter_x_values(df, x_cfg)
+    if surface_axis_cfg:
+        df = _filter_x_values(df, surface_axis_cfg)
     if df.empty:
         st.warning(f"[{plot_id}] No data after applying filters.")
         return None
@@ -809,6 +1034,8 @@ def _render_json_plot(
     transform: dict[str, Any] = plot_spec.get("transform", {})
     if agg_func:
         gk: list[str] = [x_col]
+        if surface_axis_col and surface_axis_col in df.columns:
+            gk.append(surface_axis_col)
         if group_cfg and group_cfg.get("column") in df.columns:
             gk.append(group_cfg["column"])
         # Include normalize ref column in aggregation so it survives
@@ -830,6 +1057,8 @@ def _render_json_plot(
 
     # ── 6. X-axis formatting (categorical + rename, AFTER agg) ───────
     df = _format_x_axis(df, x_cfg)
+    if surface_axis_cfg:
+        df = _format_x_axis(df, surface_axis_cfg)
 
     # ── 7. Normalize transform ───────────────────────────────────────
     if transform.get("normalize"):
@@ -858,6 +1087,20 @@ def _render_json_plot(
             df,
             transform.get("normalize_columns", y_columns),
             group_column=_grp_col,
+        )
+    if transform.get("diff"):
+        _grp_col = (
+            group_cfg["column"]
+            if group_cfg and group_cfg.get("column") in df.columns
+            else None
+        )
+        df = _apply_group_diff(
+            df,
+            transform.get("normalize_columns", y_columns),
+            x_col,
+            group_column=_grp_col,
+            scale=float(transform.get("diff_scale", 1.0)),
+            drop_first=bool(transform.get("diff_drop_first", False)),
         )
 
     # ── 8. Resolve traces ────────────────────────────────────────────
@@ -914,21 +1157,49 @@ def _render_json_plot(
         plot_df = df
 
     # ── 9. Auto-dedup safety net ─────────────────────────────────────
-    plot_df = _auto_dedup(plot_df, x_col, y_plot_col, plot_id)
+    plot_df = _auto_dedup(
+        plot_df,
+        x_col,
+        y_plot_col,
+        plot_id,
+        extra_key_cols=[surface_axis_col] if surface_axis_col else None,
+    )
 
     # ── 10. Render ───────────────────────────────────────────────────
     style_line_dash: str | dict[str, str] | None = plot_spec.get("line_dash")
     style_opacity: float | None = plot_spec.get("opacity")
 
     fig = go.Figure()
-    builder(
-        fig,
-        plot_df,
-        x_col,
-        y_plot_col,
-        line_dash=style_line_dash,
-        opacity=style_opacity,
-    )
+    if chart_type == "3D Surface":
+        builder(
+            fig,
+            plot_df,
+            x_col,
+            y_plot_col,
+            surface_axis_col=surface_axis_col,
+            line_dash=style_line_dash,
+            opacity=style_opacity,
+        )
+    elif chart_type == "Line":
+        builder(
+            fig,
+            plot_df,
+            x_col,
+            y_plot_col,
+            line_dash=style_line_dash,
+            opacity=style_opacity,
+            error_band=bool(plot_spec.get("error_band", False)),
+            colorway=plot_spec.get("layout", {}).get("colorway"),
+        )
+    else:
+        builder(
+            fig,
+            plot_df,
+            x_col,
+            y_plot_col,
+            line_dash=style_line_dash,
+            opacity=style_opacity,
+        )
 
     layout_kw: dict[str, Any] = {
         "title": title,
@@ -945,6 +1216,14 @@ def _render_json_plot(
         layout_kw["yaxis_type"] = y_scale
     layout_kw.update(plot_spec.get("layout", {}))
     fig.update_layout(**layout_kw)
+    if chart_type == "3D Surface":
+        fig.update_layout(
+            scene=dict(
+                xaxis_title=x_label,
+                yaxis_title=surface_axis_label or surface_axis_col,
+                zaxis_title=y_label,
+            )
+        )
 
     render_custom_plotly_chart(fig, width="stretch", key=f"json_{plot_id}")
 
@@ -1069,6 +1348,24 @@ def _run_manual_mode(combined: pd.DataFrame) -> None:
         st.info("Select at least one metric.")
         st.stop()
 
+    st.sidebar.header("Chart Type")
+    chart_type: str = st.sidebar.selectbox(
+        "Visualization", options=CHART_TYPES
+    )  # type: ignore[assignment]
+
+    surface_axis_col: str | None = None
+    if chart_type == "3D Surface":
+        surface_axis_options = [c for c in all_cols if c != x_col]
+        default_surface_idx = 0
+        if "SNR" in surface_axis_options:
+            default_surface_idx = surface_axis_options.index("SNR")
+        surface_axis_col = st.sidebar.selectbox(
+            "Surface Y-Axis column",
+            options=surface_axis_options,
+            index=default_surface_idx,
+            key="surface_axis_col",
+        )
+
     st.sidebar.header("Aggregation")
     agg_func = st.sidebar.selectbox(
         "Aggregate function",
@@ -1125,9 +1422,12 @@ def _run_manual_mode(combined: pd.DataFrame) -> None:
 
     plot_df = combined[combined["config"].isin(selected_configs)].copy()
     if agg_func != "none":
+        group_keys = [x_col, "config"]
+        if surface_axis_col and surface_axis_col in plot_df.columns:
+            group_keys.insert(1, surface_axis_col)
         plot_df = _aggregate_data(
             plot_df,
-            group_keys=[x_col, "config"],
+            group_keys=group_keys,
             value_cols=selected_metrics,
             func=agg_func,
             error_bars=agg_errors if agg_errors != "none" else None,
@@ -1137,11 +1437,12 @@ def _run_manual_mode(combined: pd.DataFrame) -> None:
     numeric_x = pd.to_numeric(plot_df[x_col], errors="coerce")
     if numeric_x.notna().all():
         plot_df[x_col] = numeric_x
-
-    st.sidebar.header("Chart Type")
-    chart_type: str = st.sidebar.selectbox(
-        "Visualization", options=CHART_TYPES
-    )  # type: ignore[assignment]
+    if surface_axis_col:
+        numeric_surface_axis = pd.to_numeric(
+            plot_df[surface_axis_col], errors="coerce"
+        )
+        if numeric_surface_axis.notna().all():
+            plot_df[surface_axis_col] = numeric_surface_axis
 
     st.sidebar.header("Style")
     manual_line_dash: str = st.sidebar.selectbox(
@@ -1167,7 +1468,17 @@ def _run_manual_mode(combined: pd.DataFrame) -> None:
 
     for idx, metric in enumerate(selected_metrics):
         fig = go.Figure()
-        _BUILDERS[chart_type](fig, plot_df, x_col, metric, **style_kw)
+        if chart_type == "3D Surface":
+            _BUILDERS[chart_type](
+                fig,
+                plot_df,
+                x_col,
+                metric,
+                surface_axis_col=surface_axis_col,
+                **style_kw,
+            )
+        else:
+            _BUILDERS[chart_type](fig, plot_df, x_col, metric, **style_kw)
         scale_kw: dict[str, Any] = {}
         if x_scale_type != "linear":
             scale_kw["xaxis_type"] = x_scale_type
@@ -1181,6 +1492,14 @@ def _run_manual_mode(combined: pd.DataFrame) -> None:
             height=600,
             **scale_kw,
         )
+        if chart_type == "3D Surface":
+            fig.update_layout(
+                scene=dict(
+                    xaxis_title=x_label,
+                    yaxis_title=surface_axis_col,
+                    zaxis_title=y_label,
+                )
+            )
         render_custom_plotly_chart(fig, width="stretch", key=f"csv_plot_{idx}")
 
     st.subheader("Data Table")
