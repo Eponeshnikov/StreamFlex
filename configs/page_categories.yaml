@@ -18,6 +18,12 @@ exclude:
   - "private_viz_configs.py"
 
 categories:
+  "Coding":
+    match: any
+    rules:
+      - type: contains
+        value: "ldpc"
+
   "First Component":
     match: any
     rules:

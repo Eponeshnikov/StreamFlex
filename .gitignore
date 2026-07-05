@@ -182,7 +182,6 @@ analytics
 !/pages/plotly_style_configurator.py
 !/pages/csv_plot_editor.py
 !/pages/csv_plot_editor_format.md
-
 configs/sweep/config_generation.md
 other_docs
 sionna-scenes
