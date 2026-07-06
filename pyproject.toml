@@ -44,6 +44,7 @@ dev = [
     "prettytable>=3.16.0",
     "pyqt6>=6.9.1",
     "pyside6>=6.9.1",
+    "pytest>=9.1.1",
     "scikit-learn>=1.6.1",
     "seaborn>=0.13.2",
     "shap>=0.48.0",
@@ -90,12 +91,17 @@ signal-channelizer = [
 
 [tool.uv.sources]
 polars-complex = { git = "https://github.com/monochromatti/polars-complex.git" }
+
 torch = [
     { index = "pytorch-cu130", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
 torchvision = [
     { index = "pytorch-cu130", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
 
 [[tool.uv.index]]
 name = "pytorch-cu130"
