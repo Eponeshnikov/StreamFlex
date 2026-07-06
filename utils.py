@@ -1507,12 +1507,24 @@ def add_paths_to_figure(
                     if not is_valid:
                         continue
 
-                    source_pos = source_positions_np[
-                        tx_idx * scene.tx_array.array_size
-                    ]
-                    target_pos = target_positions_np[
-                        rx_idx * scene.rx_array.array_size
-                    ]
+                    if is_synthetic:
+                        # Use the same authoritative Scene coordinates as the
+                        # TX/RX markers. This is essential after motion-aware
+                        # recomputation: cached/converted Paths endpoint
+                        # buffers can otherwise visually diverge from devices.
+                        source_pos = np.asarray(
+                            scene.transmitters[tx_name].position.numpy()
+                        ).reshape(-1)[:3]
+                        target_pos = np.asarray(
+                            scene.receivers[rx_name].position.numpy()
+                        ).reshape(-1)[:3]
+                    else:
+                        source_pos = source_positions_np[
+                            tx_idx * scene.tx_array.array_size
+                        ]
+                        target_pos = target_positions_np[
+                            rx_idx * scene.rx_array.array_size
+                        ]
 
                     # Build the polyline source -> interaction vertices -> target.
                     #
@@ -1635,3 +1647,45 @@ def get_path_type_name(interaction_type):
         8: "diffraction",
         4: "refraction",
     }.get(interaction_type, "los")
+def find_duplex_metadata(value, _seen=None):
+    """Find propagated duplex metadata in a result/config source chain."""
+    if _seen is None:
+        _seen = set()
+    if id(value) in _seen:
+        return None
+    _seen.add(id(value))
+    if isinstance(value, dict):
+        direct = value.get("duplex_metadata")
+        if isinstance(direct, dict) and direct.get("side_order"):
+            return direct
+        for key in ("results", "parameters", "config_info", "source_info"):
+            if key in value:
+                found = find_duplex_metadata(value[key], _seen)
+                if found:
+                    return found
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            found = find_duplex_metadata(item, _seen)
+            if found:
+                return found
+    return None
+
+
+def duplex_batch_labels(value, batch_size):
+    """Label first/second batch halves without changing batch indices."""
+    metadata = find_duplex_metadata(value) or {}
+    side_order = metadata.get("side_order") or []
+    base = int(metadata.get("base_batch_size") or 0)
+    if len(side_order) == 2 and not base and batch_size % 2 == 0:
+        base = batch_size // 2
+    if len(side_order) != 2 or base * 2 != batch_size:
+        return [f"Batch {i}" for i in range(batch_size)]
+    first = "TX → RX" if str(side_order[0]).startswith("forward") else "First side"
+    second = "RX → TX" if str(side_order[1]).startswith("reverse") else "Second side"
+    return [
+        first if base == 1 else f"{first} — batch {i}"
+        for i in range(base)
+    ] + [
+        second if base == 1 else f"{second} — batch {i}"
+        for i in range(base)
+    ]
