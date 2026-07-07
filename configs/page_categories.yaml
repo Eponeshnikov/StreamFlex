@@ -41,6 +41,8 @@ categories:
     rules:
       - type: contains
         value: "key_generation"
+      - type: contains
+        value: "keygen"
 
   "Scene & Materials":
     match: any
