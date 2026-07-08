@@ -84,7 +84,7 @@ def format_config_value(key: object, value: object) -> str:
             return f"Array · shape {' × '.join(map(str, value.shape))} · {value.dtype}"
     if isinstance(value, dict):
         if set(value) >= {"re", "im"}:
-            re_shape = np.shape(value.get("re"))
+            re_shape = np.shape(value["re"])
             return f"Complex array · shape {' × '.join(map(str, re_shape)) or 'scalar'}"
         return ", ".join(
             f"{humanize_config_name(k)}: {format_config_value(k, v)}"
@@ -1674,14 +1674,31 @@ def find_duplex_metadata(value, _seen=None):
 def duplex_batch_labels(value, batch_size):
     """Label first/second batch halves without changing batch indices."""
     metadata = find_duplex_metadata(value) or {}
+    return direction_labels_from_metadata(metadata, batch_size)
+
+
+def direction_labels_from_metadata(metadata, batch_size):
+    """Per-batch-index duplex direction labels from a ``duplex_metadata`` dict.
+
+    Returns a list of length ``batch_size``. When the metadata describes a
+    two-sided duplex channel (``side_order`` of length 2), the first
+    ``base_batch_size`` indices are the forward (TX → RX) side and the rest the
+    reverse (RX → TX) side; otherwise every index is a plain ``Batch i``.
+    """
+    metadata = metadata or {}
+    batch_size = int(batch_size)
     side_order = metadata.get("side_order") or []
     base = int(metadata.get("base_batch_size") or 0)
     if len(side_order) == 2 and not base and batch_size % 2 == 0:
         base = batch_size // 2
     if len(side_order) != 2 or base * 2 != batch_size:
         return [f"Batch {i}" for i in range(batch_size)]
-    first = "TX → RX" if str(side_order[0]).startswith("forward") else "First side"
-    second = "RX → TX" if str(side_order[1]).startswith("reverse") else "Second side"
+    first = (
+        "TX → RX" if str(side_order[0]).startswith("forward") else "First side"
+    )
+    second = (
+        "RX → TX" if str(side_order[1]).startswith("reverse") else "Second side"
+    )
     return [
         first if base == 1 else f"{first} — batch {i}"
         for i in range(base)
@@ -1689,3 +1706,320 @@ def duplex_batch_labels(value, batch_size):
         second if base == 1 else f"{second} — batch {i}"
         for i in range(base)
     ]
+
+
+# ---------------------------------------------------------------------------
+# Axis metadata — a stage-agnostic descriptor of a 7-dim CIR/signal tensor.
+#
+# The pipeline tensors share the leading-5-axis layout
+# ``[batch, rx, rx_ant, tx, tx_ant, ...]``. ``batch`` encodes the duplex
+# direction (TX→RX / RX→TX), and — for trajectory JSONs where the RX walk was
+# moved onto the time axis — the time axis is a concatenation of several
+# per-TX walks. ``axis_metadata`` records both so any visualizer (in a plugin
+# or a page) can split the time axis back into individual trajectories, filter
+# by the owning TX, and know which direction a batch index represents. It rides
+# through the pipeline via the standard ``config_info``/``source_info`` chain
+# and is dim-agnostic (plain JSON-able dict), so ResultsSaver serializes it too.
+# ---------------------------------------------------------------------------
+AXIS_METADATA_VERSION = 1
+CIR_AXIS_NAMES = ["batch", "rx", "rx_ant", "tx", "tx_ant", "path", "time"]
+
+
+def build_axis_metadata(
+    *,
+    batch_size,
+    duplex_metadata=None,
+    trajectory_segments=None,
+    num_time_steps=None,
+    tx_index=None,
+    dt=None,
+    axes=None,
+):
+    """Assemble the standardized ``axis_metadata`` dict (see module note).
+
+    ``trajectory_segments`` is the per-combo, RX-list-rebased segment list
+    (each with ``rx_start_index`` / ``n_points`` / ``tx_index`` / ``dt`` / ...)
+    stored by the CIR generator after the RX→time swap. Its segments are mapped
+    onto the time axis as ``time_segments``.
+    """
+    batch_size = int(batch_size)
+    directions = direction_labels_from_metadata(
+        duplex_metadata or {}, batch_size
+    )
+    time_segments = []
+    for i, seg in enumerate(trajectory_segments or []):
+        try:
+            start = int(seg.get("rx_start_index", 0))
+            count = int(seg.get("n_points", 0))
+        except (TypeError, ValueError):
+            continue
+        time_segments.append(
+            {
+                "trajectory_id": i,
+                "tx_index": seg.get("tx_index"),
+                "start": start,
+                "count": count,
+                "dt": seg.get("dt"),
+                "seed": seg.get("seed"),
+                "mode": seg.get("mode"),
+                "v_min": seg.get("v_min"),
+                "v_max": seg.get("v_max"),
+            }
+        )
+    meta = {
+        "version": AXIS_METADATA_VERSION,
+        "axes": list(axes) if axes else list(CIR_AXIS_NAMES),
+        "batch": {
+            "kind": "duplex_direction",
+            "directions": directions,
+            "side_order": (duplex_metadata or {}).get("side_order") or [],
+            "base_batch_size": (duplex_metadata or {}).get("base_batch_size"),
+        },
+        "time": {
+            "kind": "trajectory" if time_segments else "static",
+            "dt": dt,
+            "num_time_steps": (
+                int(num_time_steps) if num_time_steps is not None else None
+            ),
+            "segments": time_segments,
+        },
+        "tx_index": tx_index,
+    }
+    return meta
+
+
+def find_axis_metadata(value, _seen=None):
+    """Locate a propagated ``axis_metadata`` dict in a result/config chain."""
+    if _seen is None:
+        _seen = set()
+    if id(value) in _seen:
+        return None
+    _seen.add(id(value))
+    if isinstance(value, dict):
+        direct = value.get("axis_metadata")
+        if isinstance(direct, dict) and "axes" in direct:
+            return direct
+        for key in ("results", "parameters", "config_info", "source_info"):
+            if key in value:
+                found = find_axis_metadata(value[key], _seen)
+                if found:
+                    return found
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            found = find_axis_metadata(item, _seen)
+            if found:
+                return found
+    return None
+
+
+def axis_metadata_time_selector(
+    axis_metadata,
+    num_time_steps,
+    *,
+    key_prefix,
+    container=None,
+    tx_filter=None,
+):
+    """Render trajectory / time-point selectors for a time-axis-bearing tensor.
+
+    Splits the concatenated time axis into the walks recorded in
+    ``axis_metadata['time']['segments']`` and lets the user pick a trajectory
+    (optionally filtered to one TX) and a point within it. Returns
+    ``(time_index, info)`` where ``info`` carries the resolved trajectory id,
+    owning ``tx_index`` and the segment's ``(start, count)`` for callers that
+    want to slice the whole walk.
+
+    Falls back to a plain time-step slider when no trajectory metadata exists,
+    so it is safe to call unconditionally.
+    """
+    ui = container if container is not None else st
+    num_time_steps = int(num_time_steps)
+    segments = ((axis_metadata or {}).get("time") or {}).get("segments") or []
+    if tx_filter is not None:
+        segments = [
+            s for s in segments if s.get("tx_index") in (None, tx_filter)
+        ]
+    if not segments or num_time_steps <= 1:
+        t_idx = 0
+        if num_time_steps > 1:
+            t_idx = ui.slider(
+                "Time step",
+                0,
+                num_time_steps - 1,
+                0,
+                key=f"{key_prefix}_tstep",
+            )
+        return int(t_idx), {
+            "trajectory_id": None,
+            "tx_index": None,
+            "start": 0,
+            "count": num_time_steps,
+        }
+    labels = []
+    for s in segments:
+        tx = s.get("tx_index")
+        tx_txt = f"TX {tx}" if tx is not None else "TX ?"
+        labels.append(
+            f"Trajectory {s['trajectory_id']} ({tx_txt}, "
+            f"{s.get('count', 0)} pts)"
+        )
+    sel = ui.selectbox(
+        "Select trajectory",
+        list(range(len(segments))),
+        format_func=lambda i: labels[i],
+        key=f"{key_prefix}_traj",
+    )
+    seg = segments[int(sel)]
+    start = int(seg.get("start", 0))
+    count = max(1, int(seg.get("count", 1)))
+    end = min(start + count, num_time_steps)
+    local = 0
+    if end - start > 1:
+        local = ui.slider(
+            "Point in trajectory",
+            0,
+            end - start - 1,
+            0,
+            key=f"{key_prefix}_pt",
+        )
+    return start + int(local), {
+        "trajectory_id": seg.get("trajectory_id"),
+        "tx_index": seg.get("tx_index"),
+        "start": start,
+        "count": end - start,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Memory-aware N-dimensional chunk planner.
+#
+# The heavy stages (SignalChannelizer delay-and-sum, OptiReceiver matched
+# filter / peak finder) used to chunk only the batch and time axes. With
+# trajectory JSONs the other axes (rx, tx, ...) can also be large, so we split
+# the tensor across *all* requested axes into blocks sized to a fraction of the
+# free RAM/VRAM (divided across parallel workers). ``free_memory_bytes`` picks
+# the right pool for the device; ``plan_axis_chunks`` returns a per-axis chunk
+# size; ``iter_nd_blocks`` walks the resulting blocks as tuples of slices.
+# ---------------------------------------------------------------------------
+def free_memory_bytes(device="cpu"):
+    """Free memory (bytes) for ``device`` — VRAM for cuda/gpu, else host RAM."""
+    dev = str(device).lower()
+    if "cuda" in dev or "gpu" in dev:
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                free, _total = torch.cuda.mem_get_info()
+                return int(free)
+        except Exception:
+            pass
+    try:
+        import psutil
+
+        return int(psutil.virtual_memory().available)
+    except Exception:
+        return 4 * 1024**3  # conservative 4 GiB fallback
+
+
+def plan_axis_chunks(
+    shape,
+    splittable_axes,
+    bytes_per_element,
+    *,
+    device="cpu",
+    n_workers=1,
+    margin=0.65,
+    max_bytes=None,
+    min_chunk=1,
+):
+    """Greedy memory-aware chunk sizes for an N-dim tensor.
+
+    Returns ``{axis: chunk_size}`` for every axis in ``splittable_axes`` such
+    that one block — ``prod(chunk over splittable) * prod(full over the rest)
+    * bytes_per_element`` — fits the budget. Non-splittable axes stay whole.
+    The largest current chunk is halved each step, so blocks stay roughly
+    balanced instead of collapsing one axis to 1. ``max_bytes`` (when > 0)
+    overrides the auto budget; otherwise the budget is
+    ``free_memory_bytes(device) * margin / n_workers``.
+    """
+    shape = [max(1, int(s)) for s in shape]
+    splittable = [ax for ax in splittable_axes if 0 <= ax < len(shape)]
+    if max_bytes is not None and max_bytes > 0:
+        budget = int(max_bytes)
+    else:
+        budget = int(
+            free_memory_bytes(device)
+            * float(margin)
+            / max(1, int(n_workers))
+        )
+    bytes_per_element = max(1, int(bytes_per_element))
+    budget = max(budget, bytes_per_element)
+    fixed = 1
+    for ax in range(len(shape)):
+        if ax not in splittable:
+            fixed *= shape[ax]
+    chunks = {ax: shape[ax] for ax in splittable}
+
+    def block_bytes():
+        prod = fixed
+        for ax in splittable:
+            prod *= chunks[ax]
+        return prod * bytes_per_element
+
+    guard = 0
+    while block_bytes() > budget and guard < 4096:
+        guard += 1
+        candidates = [ax for ax in splittable if chunks[ax] > min_chunk]
+        if not candidates:
+            break
+        ax = max(candidates, key=lambda a: chunks[a])
+        chunks[ax] = max(int(min_chunk), chunks[ax] // 2)
+    return chunks
+
+
+def iter_nd_blocks(shape, chunks):
+    """Yield tuples of slices tiling ``shape`` into ``chunks`` blocks.
+
+    ``chunks`` is ``{axis: size}``; axes absent from it are taken whole.
+    """
+    import itertools as _it
+
+    ranges = []
+    for ax, dim in enumerate(shape):
+        dim = int(dim)
+        step = int(chunks.get(ax, dim)) or dim
+        step = max(1, step)
+        ranges.append(
+            [(s, min(s + step, dim)) for s in range(0, dim, step)] or [(0, dim)]
+        )
+    for combo in _it.product(*ranges):
+        yield tuple(slice(a, b) for (a, b) in combo)
+
+
+def suggest_row_batch_size(
+    bytes_per_row,
+    *,
+    n_workers=1,
+    margin=0.65,
+    min_rows=1,
+    max_rows=None,
+):
+    """Auto row/config batch size for the Parquet-streaming pages.
+
+    ``bytes_per_row`` is the caller's estimate of the peak working-set cost of
+    one row/config (exploded columns + intermediate frames). Returns how many
+    rows fit ``psutil`` free RAM × margin ÷ workers, clamped to
+    ``[min_rows, max_rows]``.
+    """
+    bytes_per_row = max(1, int(bytes_per_row))
+    try:
+        import psutil
+
+        free = int(psutil.virtual_memory().available)
+    except Exception:
+        free = 4 * 1024**3
+    budget = int(free * float(margin) / max(1, int(n_workers)))
+    rows = max(int(min_rows), budget // bytes_per_row)
+    if max_rows is not None:
+        rows = min(int(max_rows), rows)
+    return int(rows)
