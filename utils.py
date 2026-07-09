@@ -1682,8 +1682,9 @@ def direction_labels_from_metadata(metadata, batch_size):
 
     Returns a list of length ``batch_size``. When the metadata describes a
     two-sided duplex channel (``side_order`` of length 2), the first
-    ``base_batch_size`` indices are the forward (TX → RX) side and the rest the
-    reverse (RX → TX) side; otherwise every index is a plain ``Batch i``.
+    ``base_batch_size`` indices are the forward (base-station → mobile) side and
+    the rest the reverse (mobile → base-station) side; otherwise every index is
+    a plain ``Batch i``.
     """
     metadata = metadata or {}
     batch_size = int(batch_size)
@@ -1694,10 +1695,10 @@ def direction_labels_from_metadata(metadata, batch_size):
     if len(side_order) != 2 or base * 2 != batch_size:
         return [f"Batch {i}" for i in range(batch_size)]
     first = (
-        "TX → RX" if str(side_order[0]).startswith("forward") else "First side"
+        "Base → Mobile" if str(side_order[0]).startswith("forward") else "First side"
     )
     second = (
-        "RX → TX" if str(side_order[1]).startswith("reverse") else "Second side"
+        "Mobile → Base" if str(side_order[1]).startswith("reverse") else "Second side"
     )
     return [
         first if base == 1 else f"{first} — batch {i}"
