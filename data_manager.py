@@ -1,3 +1,5 @@
+import gc
+
 import streamlit as st
 from loguru import logger
 
@@ -52,6 +54,9 @@ class DataManager:
             else log_message[:1000] + "..."
         )
         self.logger.debug(log_message)
+        if key in st.session_state.shared_data:
+            del st.session_state.shared_data[key]
+            gc.collect()
         st.session_state.shared_data[key] = value
 
     def get_data(self, key, default=None):
@@ -100,6 +105,7 @@ class DataManager:
         if key in st.session_state.shared_data:
             self.logger.warning(f"Clearing data: {key}")
             del st.session_state.shared_data[key]
+            gc.collect()
 
     def export_state(self):
         """
