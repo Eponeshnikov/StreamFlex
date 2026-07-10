@@ -1,7 +1,18 @@
 import gc
+import reprlib
 
 import streamlit as st
 from loguru import logger
+
+# Bounded repr for log messages: f"{value}" on a large payload builds the
+# full multi-MB string before truncation, which dominates get/set_data for
+# big pipelines. reprlib truncates per-level instead.
+_log_repr = reprlib.Repr()
+_log_repr.maxlevel = 3
+_log_repr.maxlist = 4
+_log_repr.maxdict = 4
+_log_repr.maxstring = 200
+_log_repr.maxother = 200
 
 
 class DataManager:
@@ -47,13 +58,7 @@ class DataManager:
         --------
             None
         """
-        log_message = f"Setting data: {key}={value}"
-        log_message = (
-            log_message
-            if len(log_message) < 1000
-            else log_message[:1000] + "..."
-        )
-        self.logger.debug(log_message)
+        self.logger.debug(f"Setting data: {key}={_log_repr.repr(value)}")
         if key in st.session_state.shared_data:
             del st.session_state.shared_data[key]
             gc.collect()
@@ -77,13 +82,7 @@ class DataManager:
             or None if the key is not found.
         """
         value = st.session_state.shared_data.get(key, default)
-        log_message = f"Retrieving data: {key}={value}"
-        log_message = (
-            log_message
-            if len(log_message) < 1000
-            else log_message[:1000] + "..."
-        )
-        self.logger.debug(log_message)
+        self.logger.debug(f"Retrieving data: {key}={_log_repr.repr(value)}")
         return value
 
     def clear_data(self, key):
