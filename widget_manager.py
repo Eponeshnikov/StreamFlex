@@ -208,8 +208,13 @@ class WidgetManager:
             for plugin_name, plugin_state in state.items():
                 for widget_key in plugin_state:
                     full_key = f"{plugin_name}_{widget_key}"
-                    if full_key in st.session_state:
-                        del st.session_state[full_key]
+                    # Preset-driven widgets keep the persistence key stable but
+                    # rotate their Streamlit frontend key with a suffix.
+                    for session_key in list(st.session_state.keys()):
+                        if session_key == full_key or session_key.startswith(
+                            full_key + "_"
+                        ):
+                            del st.session_state[session_key]
             self.logger.success(
                 "Imported widget states: {plugins} plugins, {widgets} widgets",
                 plugins=len(state),

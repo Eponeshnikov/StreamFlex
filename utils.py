@@ -1677,6 +1677,187 @@ def duplex_batch_labels(value, batch_size):
     return direction_labels_from_metadata(metadata, batch_size)
 
 
+def duplex_batch_pair(value, batch_size, selected_batch=0):
+    """Return the matching forward/reverse batch indices for a duplex result.
+
+    Duplex data stores all forward batches first and the corresponding reverse
+    batches in the second half. For non-duplex data this returns only the
+    selected batch, preserving the legacy visualizer behaviour.
+    """
+    metadata = find_duplex_metadata(value) or {}
+    batch_size = int(batch_size)
+    selected_batch = max(0, min(int(selected_batch), batch_size - 1))
+    side_order = metadata.get("side_order") or []
+    base = int(metadata.get("base_batch_size") or 0)
+    if len(side_order) == 2 and not base and batch_size % 2 == 0:
+        base = batch_size // 2
+    if len(side_order) != 2 or base <= 0 or base * 2 != batch_size:
+        return [(selected_batch, f"Batch {selected_batch}")]
+    local = selected_batch % base
+    return [
+        (local, "Base → Mobile"),
+        (base + local, "Mobile → Base"),
+    ]
+
+
+def visualization_time_control(
+    plugin_instance,
+    widget_manager,
+    result,
+    num_time_steps,
+    *,
+    key_prefix,
+    container=None,
+):
+    """Shared Streamlit/smooth-Plotly time control for result visualizers.
+
+    Returns ``(selected_time_index, animation_indices)``. The second item is
+    ``None`` for the Streamlit slider and a list of absolute time indices for
+    client-side Plotly animation. Trajectory metadata narrows both modes to the
+    selected trajectory segment.
+    """
+    ui = container if container is not None else st
+    count_total = max(1, int(num_time_steps))
+    start, count = 0, count_total
+    segments = (
+        ((find_axis_metadata(result) or {}).get("time") or {}).get("segments")
+        or []
+    )
+    valid_segments = []
+    for segment in segments:
+        seg_start = max(0, int(segment.get("start", 0)))
+        seg_count = max(0, int(segment.get("count", 0)))
+        seg_count = min(seg_count, count_total - seg_start)
+        if seg_start < count_total and seg_count > 0:
+            valid_segments.append((seg_start, seg_count, segment))
+    if valid_segments:
+        labels = [
+            (
+                f"Trajectory {seg.get('trajectory_id', i)} "
+                f"(TX {seg.get('tx_index', '?')}, {seg_count} pts)"
+            )
+            for i, (_, seg_count, seg) in enumerate(valid_segments)
+        ]
+        selected = plugin_instance.create_widget(
+            widget_manager=widget_manager,
+            widget_type=ui.selectbox,
+            widget_name=f"{key_prefix}_trajectory",
+            default_value=0,
+            value_param="index",
+            args=("Select trajectory", labels),
+            value_serializer=lambda value: labels.index(value),
+            value_deserializer=lambda index: index,
+            rerun_scope="fragment",
+        )
+        selected_index = labels.index(selected) if selected in labels else 0
+        start, count, _ = valid_segments[selected_index]
+    if count <= 1:
+        return start, None
+
+    modes = ["Slider (Streamlit)", "Smooth animation (Plotly)"]
+    mode = plugin_instance.create_widget(
+        widget_manager=widget_manager,
+        widget_type=ui.radio,
+        widget_name=f"{key_prefix}_mode",
+        default_value=1,
+        value_param="index",
+        args=("Time control", modes),
+        value_serializer=lambda value: modes.index(value),
+        value_deserializer=lambda index: index,
+        kwargs={
+            "horizontal": True,
+            "help": (
+                "Streamlit slider redraws after release. Smooth animation "
+                "switches Plotly frames directly in the browser."
+            ),
+        },
+        rerun_scope="fragment",
+    )
+    if str(mode).startswith("Smooth"):
+        return start, list(range(start, start + count))
+    local_index = int(
+        plugin_instance.create_widget(
+            widget_manager=widget_manager,
+            widget_type=ui.slider,
+            widget_name=f"{key_prefix}_slider_{start}_{count}",
+            default_value=0,
+            value_param="value",
+            args=("Time step", 0, count - 1),
+            kwargs={"step": 1},
+            rerun_scope="fragment",
+        )
+    )
+    return start + local_index, None
+
+
+def add_plotly_frame_slider(fig, labels, *, prefix="Time step: "):
+    """Attach browser-side frame scrubbing and play/pause controls."""
+    steps = [
+        {
+            "method": "animate",
+            "label": str(label),
+            "args": [
+                [str(index)],
+                {
+                    "mode": "immediate",
+                    "frame": {"duration": 0, "redraw": False},
+                    "transition": {"duration": 0},
+                },
+            ],
+        }
+        for index, label in enumerate(labels)
+    ]
+    fig.update_layout(
+        sliders=[
+            {
+                "active": 0,
+                "x": 0.14,
+                "y": 0.0,
+                "len": 0.86,
+                "pad": {"t": 50, "b": 10},
+                "currentvalue": {"prefix": prefix, "visible": True},
+                "steps": steps,
+            }
+        ],
+        updatemenus=[
+            {
+                "type": "buttons",
+                "direction": "right",
+                "showactive": False,
+                "x": 0.0,
+                "y": 0.0,
+                "pad": {"t": 50, "r": 8},
+                "buttons": [
+                    {
+                        "label": "▶",
+                        "method": "animate",
+                        "args": [
+                            None,
+                            {
+                                "fromcurrent": True,
+                                "frame": {"duration": 120, "redraw": False},
+                                "transition": {"duration": 0},
+                            },
+                        ],
+                    },
+                    {
+                        "label": "⏸",
+                        "method": "animate",
+                        "args": [
+                            [None],
+                            {
+                                "mode": "immediate",
+                                "frame": {"duration": 0, "redraw": False},
+                            },
+                        ],
+                    },
+                ],
+            }
+        ],
+    )
+    return fig
+
+
 def direction_labels_from_metadata(metadata, batch_size):
     """Per-batch-index duplex direction labels from a ``duplex_metadata`` dict.
 

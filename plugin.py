@@ -139,6 +139,7 @@ class Plugin:
         value_serializer=lambda x: x,
         value_deserializer=lambda x: x,
         rerun_scope: Literal["app", "fragment"] | None = None,
+        ui_key_suffix: str = "",
     ):
         """
         Universal widget creator with state persistence.
@@ -166,7 +167,10 @@ class Plugin:
         local_rerun_scope: Literal["app", "fragment"] = (
             rerun_scope if rerun_scope is not None else self.global_rerun_scope
         )
-        full_key = f"{self.get_name()}_{widget_name}"
+        # ``widget_name`` remains the stable persistence key. ``ui_key_suffix``
+        # may rotate Streamlit's frontend identity when an external control
+        # (for example, a hardware preset) replaces the widget value.
+        full_key = f"{self.get_name()}_{widget_name}{ui_key_suffix}"
 
         # Load and deserialize saved state
         saved_raw_value, is_new_object = widget_manager.load_widget_state(
