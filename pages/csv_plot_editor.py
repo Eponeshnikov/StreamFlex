@@ -33,7 +33,7 @@ import math
 import re
 import time
 import zipfile
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -48,8 +48,10 @@ except ImportError:
     Width = Literal["stretch"]  # type: ignore[assignment, misc]
 
 try:
-    from utils import (  # type: ignore[assignment]
-        file_input,
+    from utils import (
+        # The real helper takes extra keyword arguments the fallback below
+        # does not model; the fallback is only for running this page stand-alone.
+        file_input,  # type: ignore[assignment]
         render_custom_plotly_chart,
     )
 except ImportError:
@@ -64,6 +66,28 @@ except ImportError:
         kwargs.pop("default_source", None)
         kwargs.pop("container", None)
         return st.file_uploader(label, **kwargs)
+
+
+# ── Typing helpers ───────────────────────────────────────────────────────────
+# pandas-stubs types ``frame[key]`` and ``pd.to_numeric`` as unions covering
+# every overload (scalar, sub-frame, ExtensionArray...). Every call site below
+# passes a single column name or a boolean mask, so narrow it once here rather
+# than sprinkling ``# type: ignore`` over the module.
+
+
+def _series(values: Any) -> pd.Series:
+    """Narrow a single-column indexing result to a Series."""
+    return cast("pd.Series", values)
+
+
+def _frame(values: Any) -> pd.DataFrame:
+    """Narrow a boolean-mask selection back to a DataFrame."""
+    return cast("pd.DataFrame", values)
+
+
+def _numeric(values: Any) -> pd.Series:
+    """``pd.to_numeric(..., errors="coerce")`` narrowed to a Series."""
+    return _series(pd.to_numeric(values, errors="coerce"))
 
 
 # ── Aggregation helpers ──────────────────────────────────────────────────────
@@ -122,14 +146,16 @@ def _aggregate_data(
                 result[f"{col}__err"] = result[f"{col}__err"].fillna(0)
             elif error_bars == "minmax":
                 mn = (
-                    df.groupby(existing_keys, observed=True)[col]
-                    .min()
+                    _series(
+                        df.groupby(existing_keys, observed=True)[col].min()
+                    )
                     .reset_index()
                     .rename(columns={col: f"{col}__err_minus"})
                 )
                 mx = (
-                    df.groupby(existing_keys, observed=True)[col]
-                    .max()
+                    _series(
+                        df.groupby(existing_keys, observed=True)[col].max()
+                    )
                     .reset_index()
                     .rename(columns={col: f"{col}__err_plus"})
                 )
@@ -224,12 +250,9 @@ def _compute_finite_event_model(
             f"Required columns are missing: {n_column!r}, {pair_column!r}"
         )
 
-    n_values = (
-        pd.to_numeric(df[n_column], errors="coerce").fillna(0.0).to_numpy()
-    )
+    n_values = _series(_numeric(df[n_column]).fillna(0.0)).to_numpy()
     common_values = (
-        pd.to_numeric(df[pair_column], errors="coerce")
-        .fillna(0.0)
+        _series(_numeric(df[pair_column]).fillna(0.0))
         .clip(0.0, 100.0)
         .to_numpy()
         / 100.0
@@ -323,8 +346,10 @@ def _compute_finite_event_model(
             time_res_column,
         ]
         if all(column in df.columns for column in required_reference):
-            depth = pd.to_numeric(df[depth_column], errors="coerce")
-            reference_indices = depth.groupby(df[reference_group]).idxmax()
+            depth = _numeric(df[depth_column])
+            reference_indices = depth.groupby(
+                _series(df[reference_group])
+            ).idxmax()
             reference_rows = df.loc[reference_indices].copy()
             reference_rows["_n_reference"] = pd.to_numeric(
                 reference_rows[n_column], errors="coerce"
@@ -432,11 +457,9 @@ def _compute_time_resolution_energy(
     if missing:
         raise KeyError(f"Required energy columns are missing: {missing!r}")
 
-    tp_percent = pd.to_numeric(df[percent_column], errors="coerce").to_numpy()
-    tp_power = pd.to_numeric(df[tp_power_column], errors="coerce").to_numpy()
-    merged_power = pd.to_numeric(
-        df[merged_power_column], errors="coerce"
-    ).to_numpy()
+    tp_percent = _numeric(df[percent_column]).to_numpy()
+    tp_power = _numeric(df[tp_power_column]).to_numpy()
+    merged_power = _numeric(df[merged_power_column]).to_numpy()
     corrected = np.divide(
         tp_percent * (tp_power + merged_power),
         tp_power,
@@ -511,7 +534,7 @@ def _extract_regex_columns(
                 extracted = df[source].astype(str).str.extract(compiled)
                 for col in extracted.columns:
                     df[col] = extracted[col].str.strip()
-                    numeric = pd.to_numeric(df[col], errors="coerce")
+                    numeric = _numeric(df[col])
                     if numeric.notna().all():
                         df[col] = numeric
             except re.error as exc:
@@ -600,13 +623,13 @@ def _normalize_distribution(
                     if col_sum > 0:
                         df.loc[idx, c] = df.loc[idx, c] / col_sum * 100.0
     elif ref_column and ref_column in df.columns:
-        total = float(df[ref_column].sum())
+        total = float(_series(df[ref_column]).sum())
         if total > 0:
             for c in existing:
                 df[c] = df[c] / total * 100.0
     else:
         for c in existing:
-            col_sum = float(df[c].sum())
+            col_sum = float(_series(df[c]).sum())
             if col_sum > 0:
                 df[c] = df[c] / col_sum * 100.0
     return df
@@ -809,7 +832,7 @@ def _build_line(
 ) -> None:
     palette = colorway or _DEFAULT_COLORWAY
     for idx, cfg in enumerate(df["config"].unique()):
-        sub = df[df["config"] == cfg].sort_values(x_col)
+        sub = _frame(df[df["config"] == cfg]).sort_values(x_col)
         dash = _resolve_dash(cfg, idx, line_dash)
         color = palette[idx % len(palette)]
 
@@ -869,7 +892,7 @@ def _build_bar(
     opacity: float | None = None,
 ) -> None:
     for cfg in df["config"].unique():
-        sub = df[df["config"] == cfg].sort_values(x_col)
+        sub = _frame(df[df["config"] == cfg]).sort_values(x_col)
         trace_kw: dict[str, Any] = {
             "x": sub[x_col],
             "y": sub[y_col],
@@ -892,7 +915,7 @@ def _build_grouped_bar(
     opacity: float | None = None,
 ) -> None:
     for cfg in df["config"].unique():
-        sub = df[df["config"] == cfg].sort_values(x_col)
+        sub = _frame(df[df["config"] == cfg]).sort_values(x_col)
         trace_kw: dict[str, Any] = {
             "x": sub[x_col],
             "y": sub[y_col],
@@ -915,7 +938,7 @@ def _build_stacked_bar(
     opacity: float | None = None,
 ) -> None:
     for cfg in df["config"].unique():
-        sub = df[df["config"] == cfg].sort_values(x_col)
+        sub = _frame(df[df["config"] == cfg]).sort_values(x_col)
         trace_kw: dict[str, Any] = {
             "x": sub[x_col],
             "y": sub[y_col],
@@ -937,7 +960,7 @@ def _build_stacked_area(
     opacity: float | None = None,
 ) -> None:
     for idx, cfg in enumerate(df["config"].unique()):
-        sub = df[df["config"] == cfg].sort_values(x_col)
+        sub = _frame(df[df["config"] == cfg]).sort_values(x_col)
         dash = _resolve_dash(cfg, idx, line_dash)
         trace_kw: dict[str, Any] = {
             "x": sub[x_col],
@@ -1064,11 +1087,11 @@ def _filter_x_values(df: pd.DataFrame, x_cfg: dict[str, Any]) -> pd.DataFrame:
     for v in vals:
         try:
             nv = float(v)
-            numeric_col = pd.to_numeric(df[col], errors="coerce")
+            numeric_col = _numeric(df[col])
             mask = mask | (numeric_col == nv)
         except (ValueError, TypeError):
             pass
-    return df[mask].copy()
+    return _frame(df[mask]).copy()
 
 
 def _format_x_axis(df: pd.DataFrame, x_cfg: dict[str, Any]) -> pd.DataFrame:
@@ -1082,7 +1105,7 @@ def _format_x_axis(df: pd.DataFrame, x_cfg: dict[str, Any]) -> pd.DataFrame:
         df[col] = pd.Categorical(df[col], categories=str_vals, ordered=True)
     else:
         # Auto-sort numerically when all x values are numeric
-        numeric = pd.to_numeric(df[col], errors="coerce")
+        numeric = _numeric(df[col])
         if numeric.notna().all():
             df[col] = numeric
     if x_cfg.get("rename"):
@@ -1110,8 +1133,8 @@ def _resolve_group(
     if group_cfg.get("values"):
         vals = group_cfg["values"]
         str_vals = [str(v) for v in vals]
-        mask = df[col].astype(str).isin(str_vals)
-        df = df[mask].copy()
+        mask = _series(df[col]).astype(str).isin(str_vals)
+        df = _frame(df[mask]).copy()
         df[col] = pd.Categorical(
             df[col].astype(str), categories=str_vals, ordered=True
         )
@@ -1153,7 +1176,7 @@ def _auto_dedup(
 
     dup_count = df.groupby(group_keys, observed=True).size()
     if (dup_count > 1).any():
-        max_dups = int(dup_count.max())
+        max_dups = int(_series(dup_count).max())
         st.caption(
             f"⚠️ [{plot_id}] Up to {max_dups} rows per plot key — "
             f'auto-averaging.  Add `"aggregate"` to spec to control this.'
@@ -1230,10 +1253,10 @@ def _apply_filters(
         matched = pd.Series(False, index=df.index)
         for val in allowed:
             if isinstance(val, (int, float)):
-                numeric_col = pd.to_numeric(col_series, errors="coerce")
+                numeric_col = _numeric(col_series)
                 matched = matched | (numeric_col == val)
             matched = matched | (col_series.astype(str) == str(val))
-        df = df[matched]
+        df = _frame(df[matched])
     return df
 
 
@@ -1424,7 +1447,7 @@ def _render_json_plot(
         for yc in y_columns:
             if yc not in df.columns:
                 continue
-            tmp = df[[x_col, yc]].copy()
+            tmp = _frame(df[[x_col, yc]]).copy()
             for suf in ("__err", "__err_plus", "__err_minus"):
                 ec = f"{yc}{suf}"
                 if ec in df.columns:
@@ -1443,7 +1466,7 @@ def _render_json_plot(
         for yc in y_columns:
             if yc not in df.columns:
                 continue
-            tmp = df[[x_col, yc, "config"]].copy()
+            tmp = _frame(df[[x_col, yc, "config"]]).copy()
             tmp = tmp.rename(columns={yc: "__y_value__"})
             tmp["config"] = tmp["config"] + " — " + y_rename.get(yc, yc)
             rows.append(tmp)
@@ -1565,11 +1588,14 @@ def _run_manual_mode(combined: pd.DataFrame) -> None:
             if "config" in all_source_cols
             else 0
         )
-        extract_source: str = st.sidebar.selectbox(
-            "Source column",
-            options=all_source_cols,
-            index=default_src_idx,
-            key="extract_source",
+        extract_source: str = (
+            st.sidebar.selectbox(
+                "Source column",
+                options=all_source_cols,
+                index=default_src_idx,
+                key="extract_source",
+            )
+            or ""
         )
         extract_mode = st.sidebar.radio(
             "Extraction mode",
@@ -1614,11 +1640,14 @@ def _run_manual_mode(combined: pd.DataFrame) -> None:
     default_group_idx = (
         all_available.index("config") if "config" in all_available else 0
     )
-    group_col: str = st.sidebar.selectbox(
-        "Group traces by",
-        options=all_available,
-        index=default_group_idx,
-        key="group_col",
+    group_col: str = (
+        st.sidebar.selectbox(
+            "Group traces by",
+            options=all_available,
+            index=default_group_idx,
+            key="group_col",
+        )
+        or "config"
     )
     if group_col != "config":
         combined["config"] = combined[group_col].astype(str)
@@ -1633,7 +1662,7 @@ def _run_manual_mode(combined: pd.DataFrame) -> None:
             f"Rename: {cfg}", value=cfg, key=f"rename_{cfg}"
         )
         rename_map[cfg] = new_name if new_name is not None else cfg
-    combined["config"] = combined["config"].map(rename_map)
+    combined["config"] = _series(combined["config"]).map(rename_map)
 
     non_metric_cols = {"config"}
     numeric_cols = [
@@ -1738,7 +1767,7 @@ def _run_manual_mode(combined: pd.DataFrame) -> None:
         if surface_axis_col and surface_axis_col in plot_df.columns:
             group_keys.insert(1, surface_axis_col)
         plot_df = _aggregate_data(
-            plot_df,
+            _frame(plot_df),
             group_keys=group_keys,
             value_cols=selected_metrics,
             func=agg_func,
@@ -1746,7 +1775,7 @@ def _run_manual_mode(combined: pd.DataFrame) -> None:
         )
 
     # Auto-sort x-axis numerically when all values are numeric
-    numeric_x = pd.to_numeric(plot_df[x_col], errors="coerce")
+    numeric_x = _numeric(plot_df[x_col])
     if numeric_x.notna().all():
         plot_df[x_col] = numeric_x
     if surface_axis_col:

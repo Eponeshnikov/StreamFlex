@@ -211,9 +211,8 @@ class WidgetManager:
                     # Preset-driven widgets keep the persistence key stable but
                     # rotate their Streamlit frontend key with a suffix.
                     for session_key in list(st.session_state.keys()):
-                        if session_key == full_key or session_key.startswith(
-                            full_key + "_"
-                        ):
+                        name = str(session_key)
+                        if name == full_key or name.startswith(full_key + "_"):
                             del st.session_state[session_key]
             self.logger.success(
                 "Imported widget states: {plugins} plugins, {widgets} widgets",
