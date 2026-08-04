@@ -192,12 +192,12 @@ class WidgetManager:
 
         Raises:
         -------
-        ValueError
-            If the provided state is not a dictionary, a ValueError is raised.
+        TypeError
+            If the provided state is not a dictionary, a TypeError is raised.
         """
         try:
             if not isinstance(state, dict):
-                raise ValueError("Invalid state format")
+                raise TypeError("Invalid state format")
 
             st.session_state.widget_states = state.copy()
             # Clear current_value so widgets re-read from imported widget_states

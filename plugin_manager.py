@@ -1,7 +1,6 @@
 import importlib.util
 import subprocess
 from pathlib import Path
-from typing import List
 
 from git import Repo
 from loguru import logger
@@ -174,6 +173,7 @@ class PluginManager:
                     ["pip", "install", "-r", str(req_file)],
                     capture_output=True,
                     text=True,
+                    check=False,
                 )
 
                 if result.returncode == 0:
@@ -211,7 +211,7 @@ class PluginManager:
                 shutil.rmtree(plugin_dir)
             return False
 
-    def get_plugins(self) -> List[Plugin]:
+    def get_plugins(self) -> list[Plugin]:
         """
         Retrieve a list of all registered plugins.
 

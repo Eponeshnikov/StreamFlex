@@ -1,12 +1,13 @@
 import json
 import os
-import re
 import pickle
+import re
 from copy import deepcopy
 
 import plotly.express as px
 import streamlit as st
-from utils import unflatten_dict, file_input
+
+from utils import file_input, unflatten_dict
 
 # --- CONSTANTS & DEFAULTS ---
 FONTS = [
@@ -282,14 +283,14 @@ if "themes" not in st.session_state:
         value = light_json.get(key, default_value)
         st.session_state.themes["light"][key] = {
             "value": value,
-            "include": False if "title.text" in key.lower() else True,
+            "include": not "title.text" in key.lower(),
         }
 
     for key, default_value in dark_master_defaults.items():
         value = dark_json.get(key, default_value)
         st.session_state.themes["dark"][key] = {
             "value": value,
-            "include": False if "title.text" in key.lower() else True,
+            "include": not "title.text" in key.lower(),
         }
 
 # --- GLOBAL STATE ---
@@ -332,7 +333,7 @@ if pickle_files:
                     f"File {pickle_file.name} is not a valid Plotly figure."
                 )
         except Exception as e:
-            st.error(f"Error loading {pickle_file.name}: {str(e)}")
+            st.error(f"Error loading {pickle_file.name}: {e!s}")
 
 # Combine demo plots and custom plots
 all_plots = {**demo_plots, **st.session_state.custom_plots}
@@ -625,9 +626,7 @@ with st.sidebar:
         )
         c1, c2, c3 = st.columns(3)
         with c1:
-            if st.button(
-                "Overwrite", width="stretch", type="primary"
-            ):
+            if st.button("Overwrite", width="stretch", type="primary"):
                 _save_config(st.session_state.confirm_overwrite_path)
                 del st.session_state.confirm_overwrite_path
                 st.rerun()
@@ -1015,14 +1014,9 @@ with col1:
             create_widget(
                 "text_input", "Title Text", "layout.legend.title.text"
             )
-    with tabs[4]:
-        with st.expander("🖱️ Hover Labels", expanded=True):
-            create_color_widget(
-                "Hover Background", "layout.hoverlabel.bgcolor"
-            )
-            create_color_widget(
-                "Hover Border", "layout.hoverlabel.bordercolor"
-            )
+    with tabs[4], st.expander("🖱️ Hover Labels", expanded=True):
+        create_color_widget("Hover Background", "layout.hoverlabel.bgcolor")
+        create_color_widget("Hover Border", "layout.hoverlabel.bordercolor")
 
 # --- LIVE PREVIEW & CODE GENERATION ---
 with col2:

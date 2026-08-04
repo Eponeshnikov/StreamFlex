@@ -1,12 +1,12 @@
 import os
-from pathlib import Path
-
 import time
+from pathlib import Path
 from typing import Literal
+
 import streamlit as st
-from streamlit.errors import StreamlitAPIException
 import toml
 from loguru import logger
+from streamlit.errors import StreamlitAPIException
 
 
 class Plugin:
@@ -97,8 +97,8 @@ class Plugin:
             # Reset retry count on success
             st.session_state[retry_key] = 0
 
-        except StreamlitAPIException as e:
-            self.logger.exception(f"Error in {self.get_name()} plugin: {e}")
+        except StreamlitAPIException:
+            self.logger.exception(f"Error in {self.get_name()} plugin")
             if self.rerun_on_err:
                 current_retries = st.session_state[retry_key]
                 if current_retries < self.max_retries:
@@ -112,12 +112,12 @@ class Plugin:
                         f"❌ {self.get_name()} failed after {self.max_retries} reruns"
                     )
                     self.logger.exception(
-                        f"{self.get_name()} plugin failed after {self.max_retries} reruns: {e}"
+                        f"{self.get_name()} plugin failed after {self.max_retries} reruns"
                     )
                     st.session_state[retry_key] = 0  # Reset for future use
             else:
                 st.toast(f"❌ Error in {self.get_name()} plugin")
-                self.logger.exception(f"{self.get_name()} plugin error: {e}")
+                self.logger.exception(f"{self.get_name()} plugin error")
 
         finally:
             st.toast(
@@ -135,7 +135,7 @@ class Plugin:
         default_value=None,
         value_param="value",
         args=(),
-        kwargs={},
+        kwargs=None,
         value_serializer=lambda x: x,
         value_deserializer=lambda x: x,
         rerun_scope: Literal["app", "fragment"] | None = None,
@@ -156,7 +156,7 @@ class Plugin:
         - default_value: The default value of the widget.
         - value_param (optional): The parameter name for the widget value. Default is 'value'.
         - args (optional): Additional positional arguments for the widget creation. Default is an empty tuple.
-        - kwargs (optional): Additional keyword arguments for the widget creation. Default is an empty dictionary.
+        - kwargs (optional): Additional keyword arguments for the widget creation. Default is None, treated as an empty dictionary.
         - value_serializer (optional): A function to serialize the widget value. Default is a lambda function that returns the input value.
         - value_deserializer (optional): A function to deserialize the saved widget value. Default is a lambda function that returns the input value.
 
@@ -164,6 +164,7 @@ class Plugin:
         -------
         The created and potentially updated widget value.
         """
+        kwargs = {} if kwargs is None else kwargs
         local_rerun_scope: Literal["app", "fragment"] = (
             rerun_scope if rerun_scope is not None else self.global_rerun_scope
         )
@@ -173,7 +174,7 @@ class Plugin:
         full_key = f"{self.get_name()}_{widget_name}{ui_key_suffix}"
 
         # Load and deserialize saved state
-        saved_raw_value, is_new_object = widget_manager.load_widget_state(
+        saved_raw_value, _is_new_object = widget_manager.load_widget_state(
             self.get_name(), widget_name, default_value
         )
         saved_value = value_deserializer(saved_raw_value)

@@ -1,8 +1,8 @@
 import os
 import pickle
 from datetime import datetime
-import streamlit as st
 
+import streamlit as st
 from loguru import logger
 
 
@@ -45,7 +45,7 @@ class StateManager:
         """
         try:
             # Prepare snapshot data
-            creation_time = datetime.now()
+            creation_time = datetime.now().astimezone()
             snapshot_data = {
                 "metadata": {
                     "created_at": creation_time,

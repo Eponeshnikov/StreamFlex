@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import io
 import json
+import math
 import re
 import time
 import zipfile
@@ -47,7 +48,10 @@ except ImportError:
     Width = Literal["stretch"]  # type: ignore[assignment, misc]
 
 try:
-    from utils import render_custom_plotly_chart, file_input  # type: ignore[assignment]
+    from utils import (  # type: ignore[assignment]
+        file_input,
+        render_custom_plotly_chart,
+    )
 except ImportError:
 
     def render_custom_plotly_chart(
@@ -161,11 +165,307 @@ def _aggregate_data(
     return result
 
 
+def _finite_event_fixed_moments(
+    k: int, common_fraction: float
+) -> tuple[float, float]:
+    """Expected correct intervals and compared slots for ``k`` merged events."""
+    if k <= 0:
+        return 0.0, 0.0
+    c = float(np.clip(common_fraction, 0.0, 1.0))
+    a = 0.5 * (1.0 - c)
+    correct = 0.0
+    if k >= 2:
+        for offset_steps in range(k - 1):
+            return_zero = 0.0
+            for r in range(offset_steps // 2 + 1):
+                return_zero += (
+                    math.factorial(offset_steps)
+                    / (
+                        math.factorial(r) ** 2
+                        * math.factorial(offset_steps - 2 * r)
+                    )
+                    * (a * a) ** r
+                    * c ** (offset_steps - 2 * r)
+                )
+            correct += c * c * return_zero
+
+    slots = 0.0
+    for n_common in range(k + 1):
+        for n_a_only in range(k - n_common + 1):
+            n_b_only = k - n_common - n_a_only
+            probability = (
+                math.factorial(k)
+                / (
+                    math.factorial(n_common)
+                    * math.factorial(n_a_only)
+                    * math.factorial(n_b_only)
+                )
+                * c**n_common
+                * a ** (n_a_only + n_b_only)
+            )
+            slots += probability * max(
+                n_common + n_a_only - 1,
+                n_common + n_b_only - 1,
+                0,
+            )
+    return float(correct), float(slots)
+
+
+def _compute_finite_event_model(
+    df: pd.DataFrame, spec: dict[str, Any]
+) -> pd.DataFrame:
+    """Add finite merged-event BDR and optional joint-entropy output columns."""
+    n_column = spec.get(
+        "recognized_column", "Average Number of Recognized Rays"
+    )
+    pair_column = spec.get("pair_column", "Pair Percentage")
+    if n_column not in df.columns or pair_column not in df.columns:
+        raise KeyError(
+            f"Required columns are missing: {n_column!r}, {pair_column!r}"
+        )
+
+    n_values = (
+        pd.to_numeric(df[n_column], errors="coerce").fillna(0.0).to_numpy()
+    )
+    common_values = (
+        pd.to_numeric(df[pair_column], errors="coerce")
+        .fillna(0.0)
+        .clip(0.0, 100.0)
+        .to_numpy()
+        / 100.0
+    )
+    union_values = np.divide(
+        2.0 * n_values,
+        1.0 + common_values,
+        out=np.zeros_like(n_values, dtype=float),
+        where=(1.0 + common_values) > 0,
+    )
+    expected_correct = np.zeros(len(df), dtype=float)
+    expected_slots = np.zeros(len(df), dtype=float)
+    for idx, (union_mean, common_fraction) in enumerate(
+        zip(union_values, common_values, strict=True)
+    ):
+        lower = max(0, math.floor(union_mean))
+        upper = lower + 1
+        alpha = union_mean - lower
+        c0, l0 = _finite_event_fixed_moments(lower, common_fraction)
+        c1, l1 = _finite_event_fixed_moments(upper, common_fraction)
+        expected_correct[idx] = (1.0 - alpha) * c0 + alpha * c1
+        expected_slots[idx] = (1.0 - alpha) * l0 + alpha * l1
+
+    correct_fraction = np.divide(
+        expected_correct,
+        expected_slots,
+        out=np.zeros_like(expected_correct),
+        where=expected_slots > 0,
+    )
+    df["n_components_cir"] = n_values
+    df["c_common"] = common_values
+    df["merged_events"] = union_values
+    df["expected_correct_intervals"] = expected_correct
+    df["expected_compared_slots"] = expected_slots
+    df["p_correct_finite"] = correct_fraction
+    df["bdr_finite_model"] = 50.0 * (1.0 - correct_fraction)
+    # Pure positional-agreement percentage.  It must not by itself be called
+    # the realized entropy potential because the recognized/true component
+    # count ratio cancels from that normalization.
+    df["positional_agreement_percent"] = 100.0 * correct_fraction
+
+    entropy_order = np.maximum(n_values - 1.0, 0.0)
+    joint_entropy = spec.get("joint_entropy")
+    joint_entropy_by = spec.get("joint_entropy_by")
+    entropy_values: np.ndarray | None = None
+    if joint_entropy:
+        table = np.asarray(joint_entropy, dtype=float)
+        entropy_values = np.interp(
+            entropy_order,
+            np.arange(len(table), dtype=float),
+            table,
+        )
+    elif joint_entropy_by:
+        group_column = joint_entropy_by.get("column")
+        tables = joint_entropy_by.get("values", {})
+        if group_column not in df.columns:
+            raise KeyError(
+                f"Joint-entropy group column is missing: {group_column!r}"
+            )
+        entropy_values = np.zeros(len(df), dtype=float)
+        groups = df[group_column].astype(str).to_numpy()
+        for group_name, raw_table in tables.items():
+            table = np.asarray(raw_table, dtype=float)
+            mask = groups == str(group_name)
+            entropy_values[mask] = np.interp(
+                entropy_order[mask],
+                np.arange(len(table), dtype=float),
+                table,
+            )
+    if entropy_values is not None:
+        df["joint_entropy_observable"] = entropy_values
+        df["entropy_output_finite"] = correct_fraction * entropy_values
+
+        # Estimate true components from the deepest saved Top-N row of every
+        # configuration. Category percentages use the true-ray count as their
+        # denominator, hence N_true ~= 100*N_rec/(P_TP+P_FP). Rays classified
+        # as Lost (Time Res) retain energy in a merged peak but cannot provide
+        # an independent temporal interval.
+        depth_column = spec.get("depth_column", "Top-N Peaks")
+        reference_group = spec.get("reference_group_column", "config")
+        right_column = spec.get("right_column", "Percent Right (TP)")
+        false_column = spec.get("false_column", "Percent False (FP)")
+        time_res_column = spec.get(
+            "time_res_column", "Percent Lost (Time Res)"
+        )
+        required_reference = [
+            depth_column,
+            reference_group,
+            right_column,
+            false_column,
+            time_res_column,
+        ]
+        if all(column in df.columns for column in required_reference):
+            depth = pd.to_numeric(df[depth_column], errors="coerce")
+            reference_indices = depth.groupby(df[reference_group]).idxmax()
+            reference_rows = df.loc[reference_indices].copy()
+            reference_rows["_n_reference"] = pd.to_numeric(
+                reference_rows[n_column], errors="coerce"
+            )
+            reference_rows["_right_reference"] = pd.to_numeric(
+                reference_rows[right_column], errors="coerce"
+            )
+            reference_rows["_false_reference"] = pd.to_numeric(
+                reference_rows[false_column], errors="coerce"
+            )
+            reference_rows["_time_res_reference"] = pd.to_numeric(
+                reference_rows[time_res_column], errors="coerce"
+            )
+            reference_rows = reference_rows.set_index(reference_group)
+            group_values = df[reference_group]
+            ref_n = group_values.map(reference_rows["_n_reference"]).to_numpy()
+            ref_detected_share = group_values.map(
+                reference_rows["_right_reference"]
+                + reference_rows["_false_reference"]
+            ).to_numpy()
+            ref_time_res = group_values.map(
+                reference_rows["_time_res_reference"]
+            ).to_numpy()
+            estimated_true = np.divide(
+                100.0 * ref_n,
+                ref_detected_share,
+                out=np.zeros_like(ref_n, dtype=float),
+                where=ref_detected_share > 0,
+            )
+            estimated_resolvable = estimated_true * (
+                1.0 - np.clip(ref_time_res, 0.0, 100.0) / 100.0
+            )
+            potential_order = np.maximum(estimated_resolvable - 1.0, 0.0)
+
+            potential_entropy = np.zeros(len(df), dtype=float)
+            if joint_entropy:
+                potential_table = np.asarray(joint_entropy, dtype=float)
+                potential_entropy = np.interp(
+                    potential_order,
+                    np.arange(len(potential_table), dtype=float),
+                    potential_table,
+                )
+                max_measured_order = float(len(potential_table) - 1)
+            else:
+                # ``entropy_values`` can only be populated above by one of
+                # these two specs. Help the type checker retain that invariant
+                # across the intervening dataframe code.
+                assert joint_entropy_by is not None
+                group_column = joint_entropy_by.get("column")
+                tables = joint_entropy_by.get("values", {})
+                groups = df[group_column].astype(str).to_numpy()
+                max_orders: list[int] = []
+                for group_name, raw_table in tables.items():
+                    potential_table = np.asarray(raw_table, dtype=float)
+                    mask = groups == str(group_name)
+                    potential_entropy[mask] = np.interp(
+                        potential_order[mask],
+                        np.arange(len(potential_table), dtype=float),
+                        potential_table,
+                    )
+                    max_orders.append(len(potential_table) - 1)
+                max_measured_order = (
+                    float(min(max_orders)) if max_orders else 0.0
+                )
+
+            realized_percent = np.divide(
+                100.0 * correct_fraction * entropy_values,
+                potential_entropy,
+                out=np.zeros_like(entropy_values, dtype=float),
+                where=potential_entropy > 0,
+            )
+            df["estimated_true_components"] = estimated_true
+            df["estimated_time_resolvable_components"] = estimated_resolvable
+            df["potential_entropy_order"] = potential_order
+            df["potential_entropy_order_used"] = np.minimum(
+                potential_order, max_measured_order
+            )
+            df["potential_joint_entropy"] = potential_entropy
+            df["entropy_potential_realized_percent"] = np.clip(
+                realized_percent, 0.0, 100.0
+            )
+    return df
+
+
+def _compute_time_resolution_energy(
+    df: pd.DataFrame, spec: dict[str, Any]
+) -> pd.DataFrame:
+    """Add energy completeness with unresolved-ray power assigned to TP peaks.
+
+    ``Lost (Time Res)`` denotes a true ray close enough to a detected peak to
+    be unresolved.  Its power is therefore represented by that merged peak
+    and should not be counted as missing energy.  The existing TP percentage
+    supplies the total-signal normalization, so no source CSV recalculation is
+    required.
+    """
+    percent_column = spec.get(
+        "percent_column", "Percent of Total Signal Power in TP"
+    )
+    tp_power_column = spec.get("tp_power_column", "TP Power in Bin")
+    merged_power_column = spec.get(
+        "merged_power_column", "Lost (Time Res) Power in Bin"
+    )
+    required = [percent_column, tp_power_column, merged_power_column]
+    missing = [column for column in required if column not in df.columns]
+    if missing:
+        raise KeyError(f"Required energy columns are missing: {missing!r}")
+
+    tp_percent = pd.to_numeric(df[percent_column], errors="coerce").to_numpy()
+    tp_power = pd.to_numeric(df[tp_power_column], errors="coerce").to_numpy()
+    merged_power = pd.to_numeric(
+        df[merged_power_column], errors="coerce"
+    ).to_numpy()
+    corrected = np.divide(
+        tp_percent * (tp_power + merged_power),
+        tp_power,
+        out=np.full_like(tp_percent, np.nan, dtype=float),
+        where=tp_power > 0,
+    )
+    df["energy_completeness_time_res_adjusted"] = np.clip(
+        corrected, 0.0, 100.0
+    )
+    return df
+
+
 def _compute_columns(
-    df: pd.DataFrame, computed: list[dict[str, str]]
+    df: pd.DataFrame, computed: list[dict[str, Any]]
 ) -> pd.DataFrame:
     """Add computed columns via ``pd.eval``."""
     for spec in computed:
+        if spec.get("model") == "finite_event_positional":
+            try:
+                df = _compute_finite_event_model(df, spec)
+            except Exception as exc:
+                st.warning(f"Finite-event positional model failed: {exc}")
+            continue
+        if spec.get("model") == "time_resolution_energy":
+            try:
+                df = _compute_time_resolution_energy(df, spec)
+            except Exception as exc:
+                st.warning(f"Time-resolution energy correction failed: {exc}")
+            continue
         name = spec.get("name")
         expr = spec.get("expr")
         if not name or not expr:
@@ -288,7 +588,7 @@ def _normalize_distribution(
     df = df.copy()
 
     if group_column and group_column in df.columns:
-        for _, idx in df.groupby(group_column).groups.items():
+        for idx in df.groupby(group_column).groups.values():
             if ref_column and ref_column in df.columns:
                 total = float(df.loc[idx, ref_column].sum())
                 if total > 0:
@@ -327,7 +627,7 @@ def _normalize_group_peak(
         return df
     df = df.copy()
     if group_column and group_column in df.columns:
-        for _, idx in df.groupby(group_column).groups.items():
+        for idx in df.groupby(group_column).groups.values():
             peak = df.loc[idx, existing].max().max()
             if peak > 0:
                 for c in existing:
@@ -415,15 +715,15 @@ def _get_error_arrays(df: pd.DataFrame, y_col: str) -> dict[str, Any] | None:
     asym_plus = f"{y_col}__err_plus"
     asym_minus = f"{y_col}__err_minus"
     if sym_err in df.columns:
-        return dict(type="data", array=df[sym_err].tolist(), visible=True)
+        return {"type": "data", "array": df[sym_err].tolist(), "visible": True}
     if asym_plus in df.columns and asym_minus in df.columns:
-        return dict(
-            type="data",
-            symmetric=False,
-            array=df[asym_plus].tolist(),
-            arrayminus=df[asym_minus].tolist(),
-            visible=True,
-        )
+        return {
+            "type": "data",
+            "symmetric": False,
+            "array": df[asym_plus].tolist(),
+            "arrayminus": df[asym_minus].tolist(),
+            "visible": True,
+        }
     return None
 
 
@@ -522,7 +822,7 @@ def _build_line(
                     x=sub[x_col],
                     y=upper,
                     mode="lines",
-                    line=dict(width=0),
+                    line={"width": 0},
                     hoverinfo="skip",
                     showlegend=False,
                     name=f"{cfg} +",
@@ -533,7 +833,7 @@ def _build_line(
                     x=sub[x_col],
                     y=lower,
                     mode="lines",
-                    line=dict(width=0),
+                    line={"width": 0},
                     fill="tonexty",
                     fillcolor=_hex_to_rgba(color, 0.18),
                     hoverinfo="skip",
@@ -542,13 +842,13 @@ def _build_line(
                 )
             )
 
-        trace_kw: dict[str, Any] = dict(
-            x=sub[x_col],
-            y=sub[y_col],
-            mode="lines+markers",
-            name=str(cfg),
-            line=dict(dash=dash),
-        )
+        trace_kw: dict[str, Any] = {
+            "x": sub[x_col],
+            "y": sub[y_col],
+            "mode": "lines+markers",
+            "name": str(cfg),
+            "line": {"dash": dash},
+        }
         if error_band:
             # Band already shows the spread; keep the line clean.
             trace_kw["line"]["color"] = color
@@ -570,12 +870,12 @@ def _build_bar(
 ) -> None:
     for cfg in df["config"].unique():
         sub = df[df["config"] == cfg].sort_values(x_col)
-        trace_kw: dict[str, Any] = dict(
-            x=sub[x_col],
-            y=sub[y_col],
-            name=str(cfg),
-            error_y=_get_error_arrays(sub, y_col),
-        )
+        trace_kw: dict[str, Any] = {
+            "x": sub[x_col],
+            "y": sub[y_col],
+            "name": str(cfg),
+            "error_y": _get_error_arrays(sub, y_col),
+        }
         if opacity is not None:
             trace_kw["opacity"] = opacity
         fig.add_trace(go.Bar(**trace_kw))
@@ -593,12 +893,12 @@ def _build_grouped_bar(
 ) -> None:
     for cfg in df["config"].unique():
         sub = df[df["config"] == cfg].sort_values(x_col)
-        trace_kw: dict[str, Any] = dict(
-            x=sub[x_col],
-            y=sub[y_col],
-            name=str(cfg),
-            error_y=_get_error_arrays(sub, y_col),
-        )
+        trace_kw: dict[str, Any] = {
+            "x": sub[x_col],
+            "y": sub[y_col],
+            "name": str(cfg),
+            "error_y": _get_error_arrays(sub, y_col),
+        }
         if opacity is not None:
             trace_kw["opacity"] = opacity
         fig.add_trace(go.Bar(**trace_kw))
@@ -616,9 +916,11 @@ def _build_stacked_bar(
 ) -> None:
     for cfg in df["config"].unique():
         sub = df[df["config"] == cfg].sort_values(x_col)
-        trace_kw: dict[str, Any] = dict(
-            x=sub[x_col], y=sub[y_col], name=str(cfg)
-        )
+        trace_kw: dict[str, Any] = {
+            "x": sub[x_col],
+            "y": sub[y_col],
+            "name": str(cfg),
+        }
         if opacity is not None:
             trace_kw["opacity"] = opacity
         fig.add_trace(go.Bar(**trace_kw))
@@ -637,14 +939,14 @@ def _build_stacked_area(
     for idx, cfg in enumerate(df["config"].unique()):
         sub = df[df["config"] == cfg].sort_values(x_col)
         dash = _resolve_dash(cfg, idx, line_dash)
-        trace_kw: dict[str, Any] = dict(
-            x=sub[x_col],
-            y=sub[y_col],
-            mode="lines",
-            stackgroup="one",
-            name=str(cfg),
-            line=dict(dash=dash),
-        )
+        trace_kw: dict[str, Any] = {
+            "x": sub[x_col],
+            "y": sub[y_col],
+            "mode": "lines",
+            "stackgroup": "one",
+            "name": str(cfg),
+            "line": {"dash": dash},
+        }
         if opacity is not None:
             trace_kw["opacity"] = opacity
         fig.add_trace(go.Scatter(**trace_kw))
@@ -716,14 +1018,14 @@ def _build_surface3d(
         ).sort_index()
         if piv.empty:
             continue
-        trace_kw: dict[str, Any] = dict(
-            z=piv.to_numpy(),
-            x=list(piv.columns),
-            y=list(piv.index),
-            name=str(cfg),
-            showscale=True,
-            colorbar=dict(title=str(cfg)),
-            contours={
+        trace_kw: dict[str, Any] = {
+            "z": piv.to_numpy(),
+            "x": list(piv.columns),
+            "y": list(piv.index),
+            "name": str(cfg),
+            "showscale": True,
+            "colorbar": {"title": str(cfg)},
+            "contours": {
                 "z": {
                     "show": True,
                     "usecolormap": True,
@@ -731,7 +1033,7 @@ def _build_surface3d(
                     "project_z": True,
                 }
             },
-        )
+        }
         if opacity is not None:
             trace_kw["opacity"] = opacity
         fig.add_trace(go.Surface(**trace_kw))
@@ -772,7 +1074,7 @@ def _filter_x_values(df: pd.DataFrame, x_cfg: dict[str, Any]) -> pd.DataFrame:
 def _format_x_axis(df: pd.DataFrame, x_cfg: dict[str, Any]) -> pd.DataFrame:
     """Step 5: Apply categorical ordering and rename AFTER aggregation."""
     col: str = x_cfg["column"]
-    if "values" in x_cfg and x_cfg["values"]:
+    if x_cfg.get("values"):
         vals = x_cfg["values"]
         str_vals = [str(v) for v in vals]
         # Convert to string first to ensure consistency
@@ -783,10 +1085,10 @@ def _format_x_axis(df: pd.DataFrame, x_cfg: dict[str, Any]) -> pd.DataFrame:
         numeric = pd.to_numeric(df[col], errors="coerce")
         if numeric.notna().all():
             df[col] = numeric
-    if "rename" in x_cfg and x_cfg["rename"]:
+    if x_cfg.get("rename"):
         rmap: dict[str, str] = x_cfg["rename"]
         df[col] = df[col].astype(str).map(lambda v, _r=rmap: _r.get(v, v))
-        if "values" in x_cfg and x_cfg["values"]:
+        if x_cfg.get("values"):
             renamed_cats = [rmap.get(str(v), str(v)) for v in x_cfg["values"]]
             df[col] = pd.Categorical(
                 df[col], categories=renamed_cats, ordered=True
@@ -805,7 +1107,7 @@ def _resolve_group(
     col: str = group_cfg["column"]
     if col not in df.columns:
         return df
-    if "values" in group_cfg and group_cfg["values"]:
+    if group_cfg.get("values"):
         vals = group_cfg["values"]
         str_vals = [str(v) for v in vals]
         mask = df[col].astype(str).isin(str_vals)
@@ -813,10 +1115,10 @@ def _resolve_group(
         df[col] = pd.Categorical(
             df[col].astype(str), categories=str_vals, ordered=True
         )
-    if "rename" in group_cfg and group_cfg["rename"]:
+    if group_cfg.get("rename"):
         rmap: dict[str, str] = group_cfg["rename"]
         df[col] = df[col].astype(str).map(lambda v, _r=rmap: _r.get(v, v))
-        if "values" in group_cfg and group_cfg["values"]:
+        if group_cfg.get("values"):
             renamed_cats = [
                 rmap.get(str(v), str(v)) for v in group_cfg["values"]
             ]
@@ -951,11 +1253,21 @@ def _render_json_plot(
         return None
 
     source = plot_spec.get("source")
-    df = (
-        all_dfs[source].copy()
-        if (source and source in all_dfs)
-        else combined.copy()
-    )
+    if isinstance(source, list):
+        missing = [s for s in source if s not in all_dfs]
+        if missing:
+            st.warning(
+                f"Source CSV(s) not uploaded: {', '.join(missing)} — "
+                "plot uses only the available ones."
+            )
+        parts = [all_dfs[s] for s in source if s in all_dfs]
+        df = pd.concat(parts, ignore_index=True) if parts else combined.copy()
+    else:
+        df = (
+            all_dfs[source].copy()
+            if (source and source in all_dfs)
+            else combined.copy()
+        )
 
     # ── 1. Extract columns from text ─────────────────────────────────
     extractions = plot_spec.get("extract_columns", [])
@@ -973,9 +1285,9 @@ def _render_json_plot(
         df = _apply_filters(df, filters)
 
     x_cfg: dict[str, Any] = plot_spec["x"]
-    surface_axis_cfg: dict[str, Any] | None = (
-        plot_spec.get("surface_y") or plot_spec.get("axis_y")
-    )
+    surface_axis_cfg: dict[str, Any] | None = plot_spec.get(
+        "surface_y"
+    ) or plot_spec.get("axis_y")
     y_cfg: dict[str, Any] = plot_spec["y"]
     group_cfg: dict[str, Any] | None = plot_spec.get("group")
     agg_cfg: dict[str, Any] = plot_spec.get("aggregate", {})
@@ -1000,7 +1312,7 @@ def _render_json_plot(
         if not surface_axis_cfg or not surface_axis_col:
             st.warning(
                 f"[{plot_id}] 3D Surface requires `surface_y` "
-                f'or `axis_y` with a `column` field.'
+                f"or `axis_y` with a `column` field."
             )
             return None
         if surface_axis_col not in df.columns:
@@ -1218,11 +1530,11 @@ def _render_json_plot(
     fig.update_layout(**layout_kw)
     if chart_type == "3D Surface":
         fig.update_layout(
-            scene=dict(
-                xaxis_title=x_label,
-                yaxis_title=surface_axis_label or surface_axis_col,
-                zaxis_title=y_label,
-            )
+            scene={
+                "xaxis_title": x_label,
+                "yaxis_title": surface_axis_label or surface_axis_col,
+                "zaxis_title": y_label,
+            }
         )
 
     render_custom_plotly_chart(fig, width="stretch", key=f"json_{plot_id}")
@@ -1494,11 +1806,11 @@ def _run_manual_mode(combined: pd.DataFrame) -> None:
         )
         if chart_type == "3D Surface":
             fig.update_layout(
-                scene=dict(
-                    xaxis_title=x_label,
-                    yaxis_title=surface_axis_col,
-                    zaxis_title=y_label,
-                )
+                scene={
+                    "xaxis_title": x_label,
+                    "yaxis_title": surface_axis_col,
+                    "zaxis_title": y_label,
+                }
             )
         render_custom_plotly_chart(fig, width="stretch", key=f"csv_plot_{idx}")
 

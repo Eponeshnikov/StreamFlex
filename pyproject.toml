@@ -103,6 +103,44 @@ torchvision = [
 pythonpath = ["."]
 testpaths = ["tests"]
 
+[tool.ruff]
+# pages/ and plugins/* are separate git repos without their own pyproject.toml,
+# so ruff walks up to this file and one config covers the whole tree.
+line-length = 79
+target-version = "py312"
+extend-exclude = [
+    ".cache",
+    ".tmp",
+    "logs",
+    "output_data",
+    "sionna-scenes",
+    "snapshots",
+    "tmp",
+    # Ruff reformats Python snippets inside fenced blocks; the plugin READMEs
+    # quote payloads verbatim and should stay as written.
+    "*.md",
+]
+
+[tool.ruff.lint]
+ignore = [
+    # Loguru uses `{}`-style lazy formatting, not stdlib `%s`; the stdlib
+    # logging rules misread every `logger.info("... {}", value)` call.
+    "PLE1205",
+    "G201",
+    "TRY400",
+    # Streamlit pages and plugins deliberately swallow per-item failures so one
+    # bad config/row cannot take down the whole run; the handlers log and
+    # continue on purpose.
+    "BLE001",
+    "S110",
+    "S112",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Vendored NIST STS reference implementation (see LICENSE.upstream): keep it
+# byte-comparable with upstream instead of restyling it.
+"pages/key_generation/compute/nist/[A-Z]*.py" = ["ALL"]
+
 [[tool.uv.index]]
 name = "pytorch-cu130"
 url = "https://download.pytorch.org/whl/cu130"

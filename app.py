@@ -1,6 +1,8 @@
-import streamlit as st
 import os
+
+import streamlit as st
 import yaml  # Required to parse the config file
+
 
 # --- Helper Function for Formatting Titles ---
 def format_title(filename):
@@ -17,6 +19,7 @@ def format_title(filename):
         title = title.replace("Private ", "", 1)
     return title
 
+
 # --- Functions for Loading and Applying Config Rules ---
 def load_config(path="configs/page_categories.yaml"):
     """Loads the category configuration from a YAML file."""
@@ -24,11 +27,14 @@ def load_config(path="configs/page_categories.yaml"):
         with open(path, "r") as f:
             return yaml.safe_load(f)
     except FileNotFoundError:
-        st.error(f"Configuration file not found at '{path}'. Please create it.")
+        st.error(
+            f"Configuration file not found at '{path}'. Please create it."
+        )
         return None
     except yaml.YAMLError as e:
         st.error(f"Error parsing YAML file: {e}")
         return None
+
 
 def check_file_match(filename, rules, match_type):
     """
@@ -77,7 +83,9 @@ if config and "categories" in config:
     try:
         files_in_pages = os.listdir("pages")
     except FileNotFoundError:
-        st.error("The 'pages' directory was not found. Please ensure it exists.")
+        st.error(
+            "The 'pages' directory was not found. Please ensure it exists."
+        )
         files_in_pages = []
 
     # Files listed under `exclude` in the config are import-only modules
@@ -109,7 +117,9 @@ if config and "categories" in config:
 
             # Add the page to the matched category or to "Resources" as a fallback
             if matched_category:
-                pages[matched_category].append(st.Page(page_path, title=page_title))
+                pages[matched_category].append(
+                    st.Page(page_path, title=page_title)
+                )
             else:
                 pages["Resources"].append(st.Page(page_path, title=page_title))
 

@@ -32,7 +32,7 @@ Generate publication-ready plots from CSV data by describing them in JSON.
 | `id` | string | yes | Unique identifier (used as widget key and filename on export). |
 | `title` | string | yes | Chart title. |
 | `chart_type` | string | yes | One of: `line`, `bar`, `grouped_bar`, `stacked_bar`, `stacked_area`, `heatmap`, `surface3d`. |
-| `source` | string | no | CSV filename to use. Omit to combine all uploaded CSVs. |
+| `source` | string or array | no | CSV filename to use, or a list of filenames concatenated row-wise. Omit to combine all uploaded CSVs. |
 | `extract_columns` | array | no | Extract new columns from text via regex or Key:Value splitting. |
 | `computed_columns` | array | no | Derive columns using pandas expressions. |
 | `filters` | object | no | Keep only rows matching allowed values. |

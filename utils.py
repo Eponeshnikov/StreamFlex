@@ -8,29 +8,40 @@ import numbers
 import os
 import pickle
 import sys
+import traceback
 from copy import deepcopy
-from typing import Literal, Type, cast, overload
+from typing import Literal, cast, overload
 
+import drjit as dr
 import numpy as np
 import plotly.graph_objects as go
 import streamlit as st
-from streamlit.elements.lib.layout_utils import Width
 from loguru import logger
-import traceback
 from sionna.rt import (
-    PlanarRadioMap,
     MeshRadioMap,
+    PlanarRadioMap,
 )  # Import Sionna classes needed for type checking and functionality
-import drjit as dr
-
+from streamlit.elements.lib.layout_utils import Width
 
 # --- UTILITY FUNCTIONS ---
 
 _CONFIG_ACRONYMS = {
-    "adc": "ADC", "awgn": "AWGN", "ber": "BER", "cfo": "CFO",
-    "cir": "CIR", "dc": "DC", "dt": "Sample Interval", "iq": "IQ",
-    "los": "LOS", "mimo": "MIMO", "nlos": "NLOS", "ofdm": "OFDM",
-    "qam": "QAM", "rx": "RX", "snr": "SNR", "tx": "TX",
+    "adc": "ADC",
+    "awgn": "AWGN",
+    "ber": "BER",
+    "cfo": "CFO",
+    "cir": "CIR",
+    "dc": "DC",
+    "dt": "Sample Interval",
+    "iq": "IQ",
+    "los": "LOS",
+    "mimo": "MIMO",
+    "nlos": "NLOS",
+    "ofdm": "OFDM",
+    "qam": "QAM",
+    "rx": "RX",
+    "snr": "SNR",
+    "tx": "TX",
 }
 
 _PLUGIN_LABELS = {
@@ -58,8 +69,14 @@ def humanize_config_name(name: object) -> str:
 
 def _format_si(value: float, unit: str) -> str:
     scales = (
-        (1e9, "G"), (1e6, "M"), (1e3, "k"), (1.0, ""),
-        (1e-3, "m"), (1e-6, "µ"), (1e-9, "n"), (1e-12, "p"),
+        (1e9, "G"),
+        (1e6, "M"),
+        (1e3, "k"),
+        (1.0, ""),
+        (1e-3, "m"),
+        (1e-6, "µ"),
+        (1e-9, "n"),
+        (1e-12, "p"),
     )
     magnitude = abs(value)
     for scale, prefix in scales:
@@ -104,7 +121,15 @@ def format_config_value(key: object, value: object) -> str:
             return f"{number:g} dB"
         if "power_dbm" in key_l or key_l.endswith("dbm"):
             return f"{number:g} dBm"
-        if any(token in key_l for token in ("frequency", "symbol_rate", "sample_rate", "bandwidth")):
+        if any(
+            token in key_l
+            for token in (
+                "frequency",
+                "symbol_rate",
+                "sample_rate",
+                "bandwidth",
+            )
+        ):
             return _format_si(number, "Hz")
         if key_l == "dt" or "delay" in key_l:
             return _format_si(number, "s")
@@ -139,23 +164,38 @@ def config_lineage(config_info: object) -> list[dict]:
     return stages
 
 
-def format_config_summary(config_info: object, index: int | None = None) -> str:
+def format_config_summary(
+    config_info: object, index: int | None = None
+) -> str:
     """Build a readable, stable selectbox label for a result configuration."""
     stages = config_lineage(config_info)
-    current = stages[-1] if stages else (config_info if isinstance(config_info, dict) else {})
+    current = (
+        stages[-1]
+        if stages
+        else (config_info if isinstance(config_info, dict) else {})
+    )
     prefix = f"Result {index + 1}" if index is not None else "Result"
     plugin = _PLUGIN_LABELS.get(
         current.get("plugin_key", ""),
         humanize_config_name(current.get("plugin_key", "Configuration")),
     )
     priority = (
-        "channel_backend", "model_type", "model", "modulation", "filter_type",
-        "symbol_rate", "snr", "samples_per_symbol", "delay_spread",
+        "channel_backend",
+        "model_type",
+        "model",
+        "modulation",
+        "filter_type",
+        "symbol_rate",
+        "snr",
+        "samples_per_symbol",
+        "delay_spread",
     )
     details = []
     for key in priority:
         for stage in reversed(stages or [current]):
-            params = stage.get("parameters", {}) if isinstance(stage, dict) else {}
+            params = (
+                stage.get("parameters", {}) if isinstance(stage, dict) else {}
+            )
             if key in params and params[key] is not None:
                 details.append(
                     f"{humanize_config_name(key)}: {format_config_value(key, params[key])}"
@@ -166,7 +206,9 @@ def format_config_summary(config_info: object, index: int | None = None) -> str:
     return " · ".join([prefix, plugin, *details])
 
 
-def render_config_lineage(config_info: object, *, expanded: bool = False) -> None:
+def render_config_lineage(
+    config_info: object, *, expanded: bool = False
+) -> None:
     """Render every current and upstream parameter as a readable table."""
     stages = config_lineage(config_info)
     if not stages:
@@ -174,7 +216,9 @@ def render_config_lineage(config_info: object, *, expanded: bool = False) -> Non
     rows = []
     for stage in stages:
         plugin_key = stage.get("plugin_key", "Configuration")
-        stage_label = _PLUGIN_LABELS.get(plugin_key, humanize_config_name(plugin_key))
+        stage_label = _PLUGIN_LABELS.get(
+            plugin_key, humanize_config_name(plugin_key)
+        )
         stage_id = stage.get("id")
         if stage_id is not None:
             stage_label = f"{stage_label} #{stage_id}"
@@ -254,7 +298,7 @@ class LocalFile(io.BytesIO):
         self.size = len(data)
         self.type = ""
 
-    def getvalue(self) -> bytes:  # noqa: D401 - mirror UploadedFile API
+    def getvalue(self) -> bytes:
         return self.getbuffer().tobytes()
 
     # Value-based identity so the object is stable across Streamlit reruns
@@ -287,7 +331,10 @@ def _scan_folder(folder: str, exts: list[str] | None) -> list[str]:
         path = os.path.join(folder, name)
         if not os.path.isfile(path):
             continue
-        if exts is None or os.path.splitext(path)[1].lower().lstrip(".") in exts:
+        if (
+            exts is None
+            or os.path.splitext(path)[1].lower().lstrip(".") in exts
+        ):
             out.append(path)
     return sorted(out)
 
@@ -462,7 +509,7 @@ def render_custom_plotly_chart(
         st.session_state[custom_mode_key] = False  # Default to off
 
     # Create columns for toggle and save button
-    toggle_col, save_col = st.columns([1, 4])
+    _toggle_col, _save_col = st.columns([1, 4])
 
     # with toggle_col:
     st.toggle(
@@ -562,47 +609,46 @@ def render_custom_plotly_chart(
 
         # 3. DEFINE UI CONTROLS IN A POPOVER
         # ------------------------------------
-        with top_cols[1]:
-            with st.popover("⚙️ Options"):
-                st.markdown("**General**")
-                st.checkbox(
-                    "Match App Theme",
-                    key=match_theme_key,
-                    help="Automatically switch between light/dark themes based on the app's theme.",
-                )
-                st.toggle(
-                    "Show Legend",
-                    key=show_legend_key,
-                    help="Show or hide the plot legend.",
-                )
-                st.toggle(
-                    "Use Streamlit Theme",
-                    key=use_st_theme_key,
-                    help="Override custom styles with Streamlit's native theme.",
-                )
-                st.checkbox("Show Container Border", key=show_border_key)
+        with top_cols[1], st.popover("⚙️ Options"):
+            st.markdown("**General**")
+            st.checkbox(
+                "Match App Theme",
+                key=match_theme_key,
+                help="Automatically switch between light/dark themes based on the app's theme.",
+            )
+            st.toggle(
+                "Show Legend",
+                key=show_legend_key,
+                help="Show or hide the plot legend.",
+            )
+            st.toggle(
+                "Use Streamlit Theme",
+                key=use_st_theme_key,
+                help="Override custom styles with Streamlit's native theme.",
+            )
+            st.checkbox("Show Container Border", key=show_border_key)
 
-                st.markdown("**Image Export**")
-                st.selectbox(
-                    "Format",
-                    options=["svg", "png", "jpeg", "webp"],
-                    key=export_format_key,
-                )
-                st.number_input(
-                    "Scale (multiplier)",
-                    min_value=1,
-                    max_value=10,
-                    step=1,
-                    key=export_scale_key,
-                )
+            st.markdown("**Image Export**")
+            st.selectbox(
+                "Format",
+                options=["svg", "png", "jpeg", "webp"],
+                key=export_format_key,
+            )
+            st.number_input(
+                "Scale (multiplier)",
+                min_value=1,
+                max_value=10,
+                step=1,
+                key=export_scale_key,
+            )
 
-                with st.expander("View Current Style Config"):
-                    theme_to_display = (
-                        current_theme_type
-                        if st.session_state[match_theme_key]
-                        else "light"
-                    )
-                    st.json(plot_configs.get(theme_to_display, {}))
+            with st.expander("View Current Style Config"):
+                theme_to_display = (
+                    current_theme_type
+                    if st.session_state[match_theme_key]
+                    else "light"
+                )
+                st.json(plot_configs.get(theme_to_display, {}))
 
         # 4. APPLY STYLES AND RENDER
         # ----------------------------
@@ -691,7 +737,7 @@ def save_to_pickle(data, filename, folder="cache"):
 
 
 def read_data(
-    data, save_flag, shape=None, dtype: np.dtype | Type = np.complex64
+    data, save_flag, shape=None, dtype: np.dtype | type = np.complex64
 ):
     if save_flag:
         if data.endswith(".pickle"):
@@ -747,24 +793,27 @@ def safe_literal_eval(value_str, expected_type=None, allow_none=False):
         val = ast.literal_eval(value_str)
         # self.logger.debug(f"ast.literal_eval result: {val} (type: {type(val)})")
 
-        # Type checking for single values (won't apply directly to list strings)
-        if expected_type == "int" and not isinstance(val, int):
-            # Special case: Check if it's a list where evaluation happened
-            if not isinstance(val, list):
-                # self.logger.warning(f"Type mismatch: Expected int, got {type(val)} for '{value_str}'.")
-                raise ValueError(f"Expected an integer, got {type(val)}")
-        if expected_type == "float" and not isinstance(
-            val, numbers.Number
-        ):  # Allow int to be treated as float
-            # Special case: Check if it's a list where evaluation happened
-            if not isinstance(val, list):
-                # self.logger.warning(f"Type mismatch: Expected float, got {type(val)} for '{value_str}'.")
-                raise ValueError(f"Expected a float, got {type(val)}")
-        if expected_type == "str" and not isinstance(val, str):
-            # Special case: Check if it's a list where evaluation happened
-            if not isinstance(val, list):
-                # self.logger.warning(f"Type mismatch: Expected str, got {type(val)} for '{value_str}'.")
-                raise ValueError(f"Expected a string, got {type(val)}")
+        # Type checking for single values. A ``list`` result means the string
+        # was a list literal, which is validated element-wise by the caller.
+        if (
+            expected_type == "int"
+            and not isinstance(val, int)
+            and not isinstance(val, list)
+        ):
+            raise TypeError(f"Expected an integer, got {type(val)}")
+        # numbers.Number lets an int stand in for a float
+        if (
+            expected_type == "float"
+            and not isinstance(val, numbers.Number)
+            and not isinstance(val, list)
+        ):
+            raise TypeError(f"Expected a float, got {type(val)}")
+        if (
+            expected_type == "str"
+            and not isinstance(val, str)
+            and not isinstance(val, list)
+        ):
+            raise TypeError(f"Expected a string, got {type(val)}")
 
         # Check for None if not allowed (after evaluation)
         if val is None and not allow_none:
@@ -879,7 +928,7 @@ def get_colored_logs(lines=100, log_dir="logs"):
                     )
             return "".join(colored_lines)
     except Exception as e:
-        return f"<span style='color: red'>Error reading logs: {str(e)}</span>"
+        return f"<span style='color: red'>Error reading logs: {e!s}</span>"
 
 
 def logger_init(log_dir="logs"):
@@ -973,7 +1022,7 @@ def cache_result(reset=False):
                         cached_data = pickle.load(file)
                     cached_result = cached_data
                     return cached_result
-                except (IOError, pickle.PickleError, EOFError):
+                except (OSError, pickle.PickleError, EOFError):
                     pass
             result = func(*args, **kwargs)
             cached_data = result
@@ -1067,7 +1116,7 @@ def add_planar_radiomap_to_figure(
     Add a planar radiomap to a Plotly figure.
     """
     if not isinstance(radio_map, PlanarRadioMap):
-        raise ValueError("This function only works with PlanarRadioMap")
+        raise TypeError("This function only works with PlanarRadioMap")
 
     data_np = radio_map_to_numpy(radio_map, metric, tx_idx, db_scale)
     num_cells_y, num_cells_x = data_np.shape
@@ -1125,7 +1174,7 @@ def add_planar_radiomap_to_figure(
                 f"{metric}: "
                 + "%{customdata[0]:.2f}<br>X: %{x:.2f}m<br>Y: %{y:.2f}m<br>Z: %{z:.2f}m<br><extra></extra>"
             ),
-            colorbar=dict(title=colorbar_title, x=1.02)
+            colorbar={"title": colorbar_title, "x": 1.02}
             if show_colorbar
             else None,
             showlegend=True,
@@ -1151,7 +1200,7 @@ def add_mesh_radiomap_to_figure(
     Add a mesh-based radiomap to a Plotly figure
     """
     if not isinstance(radio_map, MeshRadioMap):
-        raise ValueError("This function only works with MeshRadioMap")
+        raise TypeError("This function only works with MeshRadioMap")
 
     data_np = radio_map_to_numpy(radio_map, metric, tx_idx, db_scale)
     mesh = radio_map.measurement_surface
@@ -1218,7 +1267,7 @@ def add_mesh_radiomap_to_figure(
                 "X: %{x:.2f}m<br>Y: %{y:.2f}m<br>Z: %{z:.2f}m<br>"
                 "<extra></extra>"
             ),
-            colorbar=dict(title=colorbar_title, x=1.02)
+            colorbar={"title": colorbar_title, "x": 1.02}
             if show_colorbar
             else None,
             showlegend=True,
@@ -1327,7 +1376,7 @@ def render_sionna_scene_plotly(
                     rm_opacity,
                 )
         except Exception as e:
-            st.error(f"Error rendering radiomap: {str(e)}")
+            st.error(f"Error rendering radiomap: {e!s}")
             st.code(traceback.format_exc())
 
     tx_names_to_render = selected_tx_names or list(scene.transmitters.keys())
@@ -1341,7 +1390,7 @@ def render_sionna_scene_plotly(
                     y=[float(pos[1])],
                     z=[float(pos[2])],
                     mode="markers",
-                    marker=dict(size=8, color="red", symbol="circle"),
+                    marker={"size": 8, "color": "red", "symbol": "circle"},
                     name=f"TX: {tx_name}",
                     showlegend=show_legend,
                     legendgroup="transmitters",
@@ -1360,7 +1409,7 @@ def render_sionna_scene_plotly(
                     y=[float(pos[1])],
                     z=[float(pos[2])],
                     mode="markers",
-                    marker=dict(size=8, color="green", symbol="circle"),
+                    marker={"size": 8, "color": "green", "symbol": "circle"},
                     name=f"RX: {rx_name}",
                     showlegend=show_legend,
                     legendgroup="receivers",
@@ -1406,18 +1455,18 @@ def render_sionna_scene_plotly(
         )
 
     fig.update_layout(
-        scene=dict(
-            xaxis_title="X (m)",
-            yaxis_title="Y (m)",
-            zaxis_title="Z (m)",
-            aspectmode="data",
-            camera=dict(eye=dict(x=1.5, y=1.5, z=1.5)),
-        ),
+        scene={
+            "xaxis_title": "X (m)",
+            "yaxis_title": "Y (m)",
+            "zaxis_title": "Z (m)",
+            "aspectmode": "data",
+            "camera": {"eye": {"x": 1.5, "y": 1.5, "z": 1.5}},
+        },
         title="Sionna Scene Visualization",
         showlegend=show_legend,
-        legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01),
+        legend={"yanchor": "top", "y": 0.99, "xanchor": "left", "x": 0.01},
         height=700,
-        margin=dict(l=0, r=0, t=30, b=0),
+        margin={"l": 0, "r": 0, "t": 30, "b": 0},
     )
     return fig
 
@@ -1585,10 +1634,12 @@ def add_paths_to_figure(
                                 y=path_y,
                                 z=path_z,
                                 mode="lines",
-                                line=dict(
-                                    color=path_colors.get(path_type, "gray"),
-                                    width=width,
-                                ),
+                                line={
+                                    "color": path_colors.get(
+                                        path_type, "gray"
+                                    ),
+                                    "width": width,
+                                },
                                 opacity=_segment_opacity(
                                     path_type, is_true_los, path_type
                                 ),
@@ -1617,12 +1668,12 @@ def add_paths_to_figure(
                                     y=seg_y,
                                     z=seg_z,
                                     mode="lines",
-                                    line=dict(
-                                        color=path_colors.get(
+                                    line={
+                                        "color": path_colors.get(
                                             seg_type, "gray"
                                         ),
-                                        width=width,
-                                    ),
+                                        "width": width,
+                                    },
                                     opacity=_segment_opacity(
                                         seg_type, is_true_los, path_type
                                     ),
@@ -1633,7 +1684,7 @@ def add_paths_to_figure(
                                 )
                             )
     except Exception as e:
-        st.error(f"Could not render paths: {str(e)}")
+        st.error(f"Could not render paths: {e!s}")
         st.code(traceback.format_exc())
 
 
@@ -1647,6 +1698,8 @@ def get_path_type_name(interaction_type):
         8: "diffraction",
         4: "refraction",
     }.get(interaction_type, "los")
+
+
 def find_duplex_metadata(value, _seen=None):
     """Find propagated duplex metadata in a result/config source chain."""
     if _seen is None:
@@ -1719,10 +1772,9 @@ def visualization_time_control(
     ui = container if container is not None else st
     count_total = max(1, int(num_time_steps))
     start, count = 0, count_total
-    segments = (
-        ((find_axis_metadata(result) or {}).get("time") or {}).get("segments")
-        or []
-    )
+    segments = ((find_axis_metadata(result) or {}).get("time") or {}).get(
+        "segments"
+    ) or []
     valid_segments = []
     for segment in segments:
         seg_start = max(0, int(segment.get("start", 0)))
@@ -1876,18 +1928,18 @@ def direction_labels_from_metadata(metadata, batch_size):
     if len(side_order) != 2 or base * 2 != batch_size:
         return [f"Batch {i}" for i in range(batch_size)]
     first = (
-        "Base → Mobile" if str(side_order[0]).startswith("forward") else "First side"
+        "Base → Mobile"
+        if str(side_order[0]).startswith("forward")
+        else "First side"
     )
     second = (
-        "Mobile → Base" if str(side_order[1]).startswith("reverse") else "Second side"
+        "Mobile → Base"
+        if str(side_order[1]).startswith("reverse")
+        else "Second side"
     )
     return [
-        first if base == 1 else f"{first} — batch {i}"
-        for i in range(base)
-    ] + [
-        second if base == 1 else f"{second} — batch {i}"
-        for i in range(base)
-    ]
+        first if base == 1 else f"{first} — batch {i}" for i in range(base)
+    ] + [second if base == 1 else f"{second} — batch {i}" for i in range(base)]
 
 
 # ---------------------------------------------------------------------------
@@ -2084,9 +2136,14 @@ def axis_metadata_time_selector(
 # size; ``iter_nd_blocks`` walks the resulting blocks as tuples of slices.
 # ---------------------------------------------------------------------------
 def free_memory_bytes(device="cpu"):
-    """Free memory (bytes) for ``device`` — VRAM for cuda/gpu, else host RAM."""
+    """Free memory (bytes) for ``device`` — VRAM for cuda/gpu, else host RAM.
+
+    ``auto`` resolves the same way the heavy blocks pick their compute
+    device: CUDA when available, host otherwise. Budgeting host RAM while
+    computing on the GPU sizes blocks far past VRAM and OOMs.
+    """
     dev = str(device).lower()
-    if "cuda" in dev or "gpu" in dev:
+    if "cuda" in dev or "gpu" in dev or "auto" in dev:
         try:
             import torch
 
@@ -2095,12 +2152,95 @@ def free_memory_bytes(device="cpu"):
                 return int(free)
         except Exception:
             pass
+    return available_memory_bytes()
+
+
+def _cgroup_v2_available_bytes(
+    cgroup_root="/sys/fs/cgroup", proc_cgroup="/proc/self/cgroup"
+):
+    """Return the remaining memory in this process' cgroup v2 hierarchy.
+
+    A systemd scope can impose ``MemoryMax`` below the host's available RAM.
+    Check the current cgroup and all its parents because a parent slice may be
+    the limiting one. ``None`` means that no finite readable limit was found.
+    """
+    try:
+        with open(proc_cgroup, encoding="utf-8") as fh:
+            rel = next(
+                line.rstrip("\n").split("::", 1)[1]
+                for line in fh
+                if "::" in line
+            )
+    except (OSError, StopIteration):
+        return None
+
+    current = os.path.normpath(os.path.join(cgroup_root, rel.lstrip("/")))
+    root = os.path.normpath(cgroup_root)
+    remaining = []
+    while current == root or current.startswith(root + os.sep):
+        try:
+            with open(
+                os.path.join(current, "memory.max"), encoding="utf-8"
+            ) as fh:
+                limit_text = fh.read().strip()
+            if limit_text != "max":
+                with open(
+                    os.path.join(current, "memory.current"), encoding="utf-8"
+                ) as fh:
+                    used = int(fh.read().strip())
+                remaining.append(max(0, int(limit_text) - used))
+        except (OSError, ValueError):
+            pass
+        if current == root:
+            break
+        current = os.path.dirname(current)
+    return min(remaining) if remaining else None
+
+
+def available_memory_bytes():
+    """Memory currently available to this process, including cgroup limits."""
     try:
         import psutil
 
-        return int(psutil.virtual_memory().available)
+        host_available = int(psutil.virtual_memory().available)
     except Exception:
-        return 4 * 1024**3  # conservative 4 GiB fallback
+        host_available = 4 * 1024**3
+    cgroup_available = _cgroup_v2_available_bytes()
+    if cgroup_available is not None:
+        return min(host_available, cgroup_available)
+    return host_available
+
+
+def parquet_uncompressed_bytes_per_row(file_path):
+    """Average uncompressed Parquet payload per top-level row.
+
+    File size is a poor proxy for nested numeric data because Parquet encoding
+    and compression disappear as soon as Polars materialises it. Metadata gives
+    a cheap estimate without reading the payload itself.
+    """
+    import glob
+
+    import pyarrow.parquet as pq
+
+    paths = (
+        sorted(glob.glob(os.path.join(file_path, "*.parquet")))
+        if os.path.isdir(file_path)
+        else [file_path]
+    )
+    total_rows = 0
+    total_bytes = 0
+    for path in paths:
+        metadata = pq.ParquetFile(path).metadata
+        total_rows += int(metadata.num_rows)
+        for row_group_idx in range(metadata.num_row_groups):
+            row_group = metadata.row_group(row_group_idx)
+            for column_idx in range(row_group.num_columns):
+                total_bytes += int(
+                    row_group.column(column_idx).total_uncompressed_size
+                )
+    if total_rows <= 0 or total_bytes <= 0:
+        raise ValueError(f"No Parquet row-size metadata found in {file_path}")
+    return max(1, (total_bytes + total_rows - 1) // total_rows)
 
 
 def plan_axis_chunks(
@@ -2130,9 +2270,7 @@ def plan_axis_chunks(
         budget = int(max_bytes)
     else:
         budget = int(
-            free_memory_bytes(device)
-            * float(margin)
-            / max(1, int(n_workers))
+            free_memory_bytes(device) * float(margin) / max(1, int(n_workers))
         )
     bytes_per_element = max(1, int(bytes_per_element))
     budget = max(budget, bytes_per_element)
@@ -2172,7 +2310,8 @@ def iter_nd_blocks(shape, chunks):
         step = int(chunks.get(ax, dim)) or dim
         step = max(1, step)
         ranges.append(
-            [(s, min(s + step, dim)) for s in range(0, dim, step)] or [(0, dim)]
+            [(s, min(s + step, dim)) for s in range(0, dim, step)]
+            or [(0, dim)]
         )
     for combo in _it.product(*ranges):
         yield tuple(slice(a, b) for (a, b) in combo)
@@ -2190,16 +2329,11 @@ def suggest_row_batch_size(
 
     ``bytes_per_row`` is the caller's estimate of the peak working-set cost of
     one row/config (exploded columns + intermediate frames). Returns how many
-    rows fit ``psutil`` free RAM × margin ÷ workers, clamped to
-    ``[min_rows, max_rows]``.
+    rows fit the effective free RAM (host and cgroup limit) × margin ÷
+    workers, clamped to ``[min_rows, max_rows]``.
     """
     bytes_per_row = max(1, int(bytes_per_row))
-    try:
-        import psutil
-
-        free = int(psutil.virtual_memory().available)
-    except Exception:
-        free = 4 * 1024**3
+    free = available_memory_bytes()
     budget = int(free * float(margin) / max(1, int(n_workers)))
     rows = max(int(min_rows), budget // bytes_per_row)
     if max_rows is not None:

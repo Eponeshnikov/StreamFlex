@@ -13,6 +13,10 @@ from utils import get_colored_logs, logger_init
 from widget_manager import WidgetManager
 
 
+class SnapshotError(RuntimeError):
+    """A snapshot could not be saved or deleted."""
+
+
 class Toc:
     def __init__(self):
         self._items = []
@@ -209,7 +213,7 @@ def clear_cache_dirs(
 
     except Exception as e:
         logger.error(f"Cache clearing failed: {e}")
-        return False, f"Failed to clear: {str(e)}"
+        return False, f"Failed to clear: {e!s}"
 
 
 @st.fragment
@@ -361,7 +365,9 @@ def global_trigger():
 
 def main():
     # st.session_state["global_trigger"] = False
-    st.session_state["timestemp"] = datetime.now().strftime("%Y%m%d_%H%M%S")
+    st.session_state["timestemp"] = (
+        datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
+    )
     st.set_page_config(page_title="Dynamic Plugin System", layout="wide")
 
     st.title("🎛️ StreamFlex")
@@ -411,7 +417,7 @@ def main():
                             logger.info(f"Saved snapshot: {snapshot_name}")
                             st.success(f"✅ Saved: {snapshot_name}")
                         else:
-                            raise Exception("Snapshot save failed")
+                            raise SnapshotError("Snapshot save failed")
                     except Exception as e:
                         logger.error(f"Save error: {e}")
                         st.error("❌ Failed to save snapshot")
@@ -455,7 +461,7 @@ def main():
                             st.success(f"✅ Deleted: {selected_snapshot}")
                             st.rerun()
                         else:
-                            raise Exception("Snapshot delete failed")
+                            raise SnapshotError("Snapshot delete failed")
                     except Exception as e:
                         logger.error(f"Delete error: {e}")
                         st.error("❌ Failed to delete snapshot")
@@ -497,7 +503,7 @@ def main():
                         logger.info(f"Executed plugin: {plugin_name}")
                     except Exception as e:
                         logger.error(f"Plugin {plugin_name} failed: {e}")
-                        st.error(f"❌ Error in {plugin_name}: {str(e)}")
+                        st.error(f"❌ Error in {plugin_name}: {e!s}")
         toc.generate()
     else:
         st.info(
