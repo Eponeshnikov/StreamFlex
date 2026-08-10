@@ -29,6 +29,7 @@ codegenerator = [
 ]
 dev = [
     "catboost>=1.2.8",
+    "cupy-cuda13x>=13.0",
     "dask>=2025.4.1",
     "dask-ml>=2025.1.0",
     "deltalake>=0.25.5",
