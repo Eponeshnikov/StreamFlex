@@ -1,4 +1,5 @@
 import os
+import shutil
 from datetime import datetime
 
 import psutil
@@ -216,6 +217,164 @@ def clear_cache_dirs(
         return False, f"Failed to clear: {e!s}"
 
 
+PLUGIN_OUTPUT_ROOT = os.path.join("output_data", "plugins")
+
+
+def list_plugin_outputs(root=PLUGIN_OUTPUT_ROOT):
+    """
+    Enumerate the per-run artifacts each plugin writes under output_data/plugins.
+
+    Plugins with a "save results to file" option (SignalChannelizer,
+    OptiReceiver) dump their heavy payloads into
+    ``output_data/plugins/<plugin>/<timestamp>/``, and ResultsSaver writes its
+    parquets next to them. Those are the only parts of output_data that are
+    disposable once the results have been processed — everything else
+    (processed/, dataset/, models/, first_component/) must stay.
+
+    Args:
+        root (str): Base folder holding the per-plugin subfolders.
+
+    Returns:
+        dict: ``{plugin_name: [(entry_name, path, size_bytes), ...]}`` with the
+              entries of every plugin sorted newest first.
+    """
+    outputs = {}
+    if not os.path.isdir(root):
+        return outputs
+
+    for plugin_name in sorted(os.listdir(root)):
+        plugin_dir = os.path.join(root, plugin_name)
+        if not os.path.isdir(plugin_dir):
+            continue
+
+        entries = []
+        for entry_name in os.listdir(plugin_dir):
+            entry_path = os.path.join(plugin_dir, entry_name)
+            try:
+                size = (
+                    get_dir_size(entry_path)
+                    if os.path.isdir(entry_path)
+                    else os.path.getsize(entry_path)
+                )
+                mtime = os.path.getmtime(entry_path)
+            except OSError:
+                continue
+            entries.append((entry_name, entry_path, size, mtime))
+
+        entries.sort(key=lambda item: item[3], reverse=True)
+        outputs[plugin_name] = [
+            (name, path, size) for name, path, size, _ in entries
+        ]
+    return outputs
+
+
+def delete_plugin_outputs(paths, root=PLUGIN_OUTPUT_ROOT):
+    """
+    Delete plugin run folders/files, refusing anything outside output_data/plugins.
+
+    Args:
+        paths (list): Paths previously reported by :func:`list_plugin_outputs`.
+        root (str): Guard directory — nothing outside it is ever removed.
+
+    Returns:
+        tuple: ``(removed, freed_bytes, errors)``
+    """
+    root_abs = os.path.abspath(root)
+    removed, errors = [], []
+    freed = 0
+
+    for path in paths:
+        path_abs = os.path.abspath(path)
+        if (
+            path_abs == root_abs
+            or os.path.commonpath([root_abs, path_abs]) != root_abs
+        ):
+            errors.append(f"{path}: outside {root}, skipped")
+            continue
+        try:
+            if os.path.isdir(path_abs):
+                size = get_dir_size(path_abs)
+                shutil.rmtree(path_abs)
+            elif os.path.exists(path_abs):
+                size = os.path.getsize(path_abs)
+                os.unlink(path_abs)
+            else:
+                continue
+            freed += size
+            removed.append(path)
+            logger.info(f"Removed plugin output {path} ({format_size(size)})")
+        except OSError as e:
+            logger.error(f"Failed to delete {path}: {e}")
+            errors.append(f"{path}: {e}")
+
+    return removed, freed, errors
+
+
+def plugin_output_cleanup_ui():
+    """Per-plugin cleanup of the run folders under output_data/plugins."""
+    st.caption(
+        "Remove the per-run files written by the plugins' *save results to "
+        "file* option. Only `output_data/plugins/` is touched — datasets, "
+        "models and processed results stay."
+    )
+    outputs = list_plugin_outputs()
+    if not outputs:
+        st.info("No plugin output folders yet.")
+        return
+
+    plugin_names = sorted(outputs)
+    plugin_choice = st.selectbox(
+        "Plugin",
+        plugin_names,
+        format_func=lambda name: (
+            f"{name} ({format_size(sum(e[2] for e in outputs[name]))})"
+        ),
+        key="plugin_output_cleanup_plugin",
+    )
+    entries = outputs.get(plugin_choice, [])
+    if not entries:
+        st.info(f"'{plugin_choice}' has no output files.")
+        return
+
+    labels = {
+        f"{name} — {format_size(size)}": path for name, path, size in entries
+    }
+    sizes = {
+        f"{name} — {format_size(size)}": size for name, _, size in entries
+    }
+
+    select_all = st.checkbox(
+        f"Select all {len(entries)} runs",
+        key="plugin_output_cleanup_all",
+    )
+    if select_all:
+        chosen = list(labels)
+    else:
+        chosen = st.multiselect(
+            "Runs (newest first)",
+            list(labels),
+            key="plugin_output_cleanup_runs",
+        )
+
+    selected_paths = [labels[label] for label in chosen]
+    selected_size = sum(sizes[label] for label in chosen)
+
+    if st.button(
+        f"🗑️ Delete selected ({format_size(selected_size)})",
+        key="plugin_output_cleanup_delete",
+        disabled=not selected_paths,
+    ):
+        removed, freed, errors = delete_plugin_outputs(selected_paths)
+        if removed:
+            st.success(
+                f"Deleted {len(removed)} entries, freed {format_size(freed)}"
+            )
+        if errors:
+            st.error("\n\n".join(errors))
+        if not removed and not errors:
+            st.info("Nothing to delete.")
+
+
 @st.fragment
 def cache_management_ui():
     """Streamlit UI for cache management operations"""
@@ -229,13 +388,20 @@ def cache_management_ui():
             type="primary",
         )
         sizes = get_cache_sizes()
-        col1, col2, col3 = st.tabs([".tmp", ".cache", "Output"])
+        col1, col2, col3, col4 = st.tabs(
+            [".tmp", ".cache", "Output", "Plugins"]
+        )
         with col1:
             st.metric(".tmp Size", sizes["tmp"]["formatted"])
         with col2:
             st.metric(".cache Size", sizes["cache"]["formatted"])
         with col3:
             st.metric("Output Size", sizes["output"]["formatted"])
+        with col4:
+            st.metric(
+                "Plugin Outputs Size",
+                format_size(get_dir_size(PLUGIN_OUTPUT_ROOT)),
+            )
         # Cache files section
         clear_select = st.pills(
             "Select folder for clearing",
@@ -276,6 +442,9 @@ def cache_management_ui():
             else:
                 st.error(msg)
 
+    with st.expander(" Clear Plugin Outputs", icon="🔌"):
+        plugin_output_cleanup_ui()
+
 
 @st.fragment
 def session_state_manager():
@@ -289,6 +458,140 @@ def session_state_manager():
 
 # Logging configuration
 logger_init()
+
+
+def _trace_session_events():
+    """Record who asks streamlit to stop a running script.
+
+    A stop request raises StopException, which derives from BaseException and
+    therefore leaves no trace in the app's own handlers. This version of
+    streamlit does not log back messages either, so wrap the single funnel all
+    three sources go through — the client's `stop_script` message, session
+    shutdown, and websocket disconnect — and log the caller.
+    """
+    import traceback
+
+    from streamlit.runtime.app_session import AppSession
+
+    if getattr(AppSession, "_streamflex_traced", False):
+        return
+
+    original_request_script_stop = AppSession.request_script_stop
+
+    def request_script_stop(self, *args, **kwargs):
+        callers = " <- ".join(
+            f"{frame.name}:{frame.lineno}"
+            for frame in reversed(traceback.extract_stack()[-6:-1])
+        )
+        logger.bind(class_name="streamlit").warning(
+            f"request_script_stop for session "
+            f"{getattr(self, 'id', '?')} via {callers}"
+        )
+        return original_request_script_stop(self, *args, **kwargs)
+
+    AppSession.request_script_stop = request_script_stop
+    AppSession._streamflex_traced = True  # type: ignore[attr-defined]
+
+    # The disconnect itself is decided one layer lower: uvicorn/websockets know
+    # the close code (1009 = message too big, 1006 = abnormal, ...). Those are
+    # stdlib-logging records that only reach stderr, so mirror them into the
+    # loguru file.
+    import logging
+
+    class _ToLoguru(logging.Handler):
+        def emit(self, record):
+            # Routine chatter (session lifecycle, runtime states) goes to TRACE
+            # so it stays out of the DEBUG log; anything at WARNING or above
+            # keeps its own level, since that is where close codes show up.
+            level = (
+                record.levelname
+                if record.levelno >= logging.WARNING
+                else "TRACE"
+            )
+            logger.bind(class_name=record.name).log(level, record.getMessage())
+
+    handler = _ToLoguru()
+    for name in (
+        "uvicorn.error",
+        "websockets",
+        "websockets.server",
+        "streamlit.runtime.runtime",
+        "streamlit.runtime.websocket_session_manager",
+    ):
+        stdlib_logger = logging.getLogger(name)
+        stdlib_logger.setLevel(logging.DEBUG)
+        if not any(isinstance(h, _ToLoguru) for h in stdlib_logger.handlers):
+            stdlib_logger.addHandler(handler)
+
+    from streamlit.runtime.runtime_util import get_max_message_size_bytes
+    from streamlit.web.server.starlette.starlette_server import (
+        _get_websocket_settings,
+    )
+
+    logger.bind(class_name="streamlit").info(
+        f"websocket settings: ping(interval, timeout)="
+        f"{_get_websocket_settings()}, "
+        f"max_message_size={get_max_message_size_bytes() / 1024**2:.0f}MB"
+    )
+
+    # How much is actually pushed at the client, and whether one message gets
+    # near the size limit right before a disconnect.
+    original_enqueue = AppSession._enqueue_forward_msg
+    big_message_mb = 5
+
+    def _enqueue_forward_msg(self, msg):
+        try:
+            size = msg.ByteSize()
+            total = getattr(self, "_streamflex_bytes", 0) + size
+            self._streamflex_bytes = total
+            if size > big_message_mb * 1024**2:
+                logger.bind(class_name="streamlit").warning(
+                    f"forward msg {size / 1024**2:.1f}MB "
+                    f"(type '{msg.WhichOneof('type')}'), "
+                    f"session total {total / 1024**2:.1f}MB"
+                )
+        except Exception:  # never break rendering over instrumentation
+            pass
+        return original_enqueue(self, msg)
+
+    AppSession._enqueue_forward_msg = _enqueue_forward_msg
+
+    # Streamlit disconnects a client whose send queue overflows ("slow clients
+    # (bad network, paused tabs)"), and that disconnect is what stops the run.
+    # Watch the queue depth, and widen the limit: a single remote user over a
+    # ~9 Mbit link cannot drain a heavy CIR render within 500 pending messages.
+    from streamlit.web.server.starlette import (
+        starlette_websocket as _ws_module,
+    )
+
+    _ws_module.WEBSOCKET_MAX_SEND_QUEUE_SIZE = 20000  # type: ignore[attr-defined]
+
+    original_write = _ws_module.StarletteSessionClient.write_forward_msg
+
+    def write_forward_msg(self, msg):
+        queue = getattr(self, "_send_queue", None)
+        if queue is not None:
+            depth = queue.qsize()
+            if depth and depth % 250 == 0:
+                logger.bind(class_name="streamlit").warning(
+                    f"client send queue depth {depth}/{queue.maxsize} "
+                    "— client is not draining"
+                )
+        try:
+            return original_write(self, msg)
+        except Exception:
+            logger.bind(class_name="streamlit").error(
+                "write_forward_msg failed: closed="
+                f"{getattr(self, '_closed', None) and self._closed.is_set()}, "
+                f"queue={queue.qsize() if queue else '?'}/"
+                f"{queue.maxsize if queue else '?'}"
+            )
+            raise
+
+    _ws_module.StarletteSessionClient.write_forward_msg = write_forward_msg
+
+
+_trace_session_events()
 
 
 def load_monitor():
@@ -364,7 +667,10 @@ def global_trigger():
 
 
 def main():
-    # st.session_state["global_trigger"] = False
+    # Plugins read this key by index, so it must exist on the very first run of
+    # a session. setdefault (not a plain assignment) keeps the value written by
+    # the trigger's on_click callback, which fires before this rerun.
+    st.session_state.setdefault("global_trigger", False)
     st.session_state["timestemp"] = (
         datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
     )
@@ -489,27 +795,40 @@ def main():
     )
 
     # Plugin Execution
-    if selected_plugins:
-        st.subheader("🚀 Active Plugins")
-        for plugin_name in selected_plugins:
-            with st.container():
-                plugin = plugin_mgr.plugins.get(plugin_name)
-                if plugin:
-                    try:
-                        toc.header(f"{plugin_name}")
-                        if rerun_scope is not None:
-                            plugin.global_rerun_scope = rerun_scope
-                        plugin.run_notification(data_mgr, widget_mgr)
-                        logger.info(f"Executed plugin: {plugin_name}")
-                    except Exception as e:
-                        logger.error(f"Plugin {plugin_name} failed: {e}")
-                        st.error(f"❌ Error in {plugin_name}: {e!s}")
-        toc.generate()
-    else:
-        st.info(
-            "ℹ️ No plugins selected. Choose plugins from the dropdown above."
-        )
-    st.session_state["global_trigger"] = False
+    try:
+        if selected_plugins:
+            st.subheader("🚀 Active Plugins")
+            for plugin_name in selected_plugins:
+                with st.container():
+                    plugin = plugin_mgr.plugins.get(plugin_name)
+                    if plugin:
+                        try:
+                            toc.header(f"{plugin_name}")
+                            if rerun_scope is not None:
+                                plugin.global_rerun_scope = rerun_scope
+                            plugin.run_notification(data_mgr, widget_mgr)
+                            logger.info(f"Executed plugin: {plugin_name}")
+                        except Exception as e:
+                            logger.error(f"Plugin {plugin_name} failed: {e}")
+                            st.error(f"❌ Error in {plugin_name}: {e!s}")
+                        except BaseException as e:
+                            # Streamlit's StopException/RerunException derive from
+                            # BaseException, so an interrupted run leaves no trace
+                            # in the handler above. Name it, then let it through.
+                            logger.warning(
+                                f"Plugin {plugin_name} interrupted by "
+                                f"{type(e).__module__}.{type(e).__name__}: {e!r}"
+                            )
+                            raise
+            toc.generate()
+        else:
+            st.info(
+                "ℹ️ No plugins selected. Choose plugins from the dropdown above."
+            )
+    finally:
+        # Must run even when the script is interrupted: otherwise the trigger
+        # stays latched and every later rerun regenerates everything.
+        st.session_state["global_trigger"] = False
     # Enhanced Debug Section
     with st.sidebar.expander("🔍 Debug Console"):
         st.subheader("📊 System Resources (Beta)")
