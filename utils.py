@@ -1277,6 +1277,58 @@ def add_mesh_radiomap_to_figure(
     )
 
 
+def _collect_scene_meshes(scene):
+    """``(name, (N, 3) vertices, flat faces)`` for every scene object."""
+    meshes = []
+    for obj_name, obj in scene.objects.items():
+        try:
+            mesh = obj.mi_mesh
+            vertices = mesh.vertex_positions_buffer().numpy()
+            faces = mesh.faces_buffer().numpy()
+        except Exception:
+            continue
+        meshes.append((obj_name, vertices.reshape(-1, 3), faces))
+    return meshes
+
+
+def _weld_mesh(vertices, faces):
+    """Losslessly merge exactly coincident vertices for Plotly.
+
+    Sionna meshes often repeat a vertex for every adjacent triangle.  Plotly
+    only needs one copy plus the remapped indices, so exact welding reduces
+    the websocket payload without moving a point or removing a triangle.
+    Unreferenced vertices are omitted as well.
+    """
+    points = np.asarray(vertices).reshape(-1, 3)
+    face_indices = np.asarray(faces).reshape(-1)
+    if face_indices.size == 0:
+        empty_points = points[:0]
+        empty_indices = np.empty((0, 3), dtype=np.uint32)
+        return (
+            empty_points[:, 0],
+            empty_points[:, 1],
+            empty_points[:, 2],
+            empty_indices[:, 0],
+            empty_indices[:, 1],
+            empty_indices[:, 2],
+        )
+
+    # Select referenced points before np.unique so stale/unreferenced buffer
+    # entries do not get serialized. Equality is exact: there is deliberately
+    # no rounding, quantization, decimation, or degenerate-face filtering.
+    referenced = points[face_indices.astype(np.int64, copy=False)]
+    unique, inverse = np.unique(referenced, axis=0, return_inverse=True)
+    remapped = inverse.astype(np.uint32, copy=False).reshape(-1, 3)
+    return (
+        unique[:, 0],
+        unique[:, 1],
+        unique[:, 2],
+        remapped[:, 0],
+        remapped[:, 1],
+        remapped[:, 2],
+    )
+
+
 def render_sionna_scene_plotly(
     scene,
     paths=None,
@@ -1306,6 +1358,9 @@ def render_sionna_scene_plotly(
 ) -> go.Figure:
     """
     Render a Sionna scene using Plotly in Streamlit.
+
+    Scene meshes are reduced losslessly by welding exactly coincident
+    vertices.
     """
     fig = go.Figure()
 
@@ -1321,31 +1376,45 @@ def render_sionna_scene_plotly(
     path_widths = {"los": 4}
 
     if show_objects:
-        for obj_name, obj in scene.objects.items():
+        meshes = _collect_scene_meshes(scene)
+        welded = [
+            (name, _weld_mesh(vertices, faces))
+            for name, vertices, faces in meshes
+        ]
+        triangle_count = sum(len(parts[3]) for _, parts in welded)
+        vertex_count_full = sum(len(vertices) for _, vertices, _ in meshes)
+        vertex_count = sum(len(parts[0]) for _, parts in welded)
+        fig.update_layout(
+            meta={
+                "geometry_reduction": "exact_vertex_welding",
+                "triangles": triangle_count,
+                "triangles_full": triangle_count,
+                "vertices": vertex_count,
+                "vertices_full": vertex_count_full,
+            }
+        )
+        for obj_name, (x, y, z, i, j, k) in welded:
+            if len(i) == 0:
+                continue
             try:
-                mesh = obj.mi_mesh
-                vertices = mesh.vertex_positions_buffer().numpy()
-                faces = mesh.faces_buffer().numpy()
-                x, y, z = vertices[0::3], vertices[1::3], vertices[2::3]
-                i, j, k = faces[0::3], faces[1::3], faces[2::3]
-                obj_color = get_object_color(obj)
-                fig.add_trace(
-                    go.Mesh3d(
-                        x=x,
-                        y=y,
-                        z=z,
-                        i=i,
-                        j=j,
-                        k=k,
-                        opacity=building_opacity,
-                        color=obj_color,
-                        name=obj_name,
-                        showlegend=False,
-                        hoverinfo="name",
-                    )
-                )
+                obj_color = get_object_color(scene.objects[obj_name])
             except Exception:
-                pass
+                obj_color = "lightblue"
+            fig.add_trace(
+                go.Mesh3d(
+                    x=x,
+                    y=y,
+                    z=z,
+                    i=i,
+                    j=j,
+                    k=k,
+                    opacity=building_opacity,
+                    color=obj_color,
+                    name=obj_name,
+                    showlegend=False,
+                    hoverinfo="name",
+                )
+            )
 
     if radio_map is not None:
         try:
