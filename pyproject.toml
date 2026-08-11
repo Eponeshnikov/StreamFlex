@@ -47,6 +47,7 @@ dev = [
     "prettytable>=3.16.0",
     "pyqt6>=6.9.1",
     "pyside6>=6.9.1",
+    "pysocks>=1.7.1",
     "pytest>=9.1.1",
     "scikit-learn>=1.6.1",
     "seaborn>=0.13.2",
