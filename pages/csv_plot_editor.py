@@ -1205,6 +1205,35 @@ def _auto_dedup(
 # ── Export / save helpers ────────────────────────────────────────────────────
 
 
+_CHROME_HINT = (
+    "Static image export (PNG/SVG) needs a Chrome build for kaleido. "
+    "Install it once with `.venv/bin/plotly_get_chrome -y` "
+    "(or `uv run plotly_get_chrome -y`). HTML export works without it."
+)
+
+
+def _image_export_message(exc: Exception) -> str:
+    """Turn a kaleido/plotly export failure into an actionable message."""
+    text = str(exc)
+    if "Chrome" in text or "chrome" in text:
+        return _CHROME_HINT
+    return f"Image export failed: {type(exc).__name__}: {text}"
+
+
+@st.cache_resource(show_spinner=False)
+def _image_export_blocker() -> str | None:
+    """``None`` when PNG/SVG export works, else why it does not.
+
+    kaleido v1 drives a headless Chrome; probing once here keeps the failure
+    out of button callbacks, where an exception aborts the whole page.
+    """
+    try:
+        go.Figure().to_image(format="png", width=100, height=100)
+    except Exception as exc:  # reported in the UI
+        return _image_export_message(exc)
+    return None
+
+
 def _fig_to_png_bytes(fig: go.Figure, w: int = 1200, h: int = 600) -> bytes:
     return fig.to_image(format="png", width=w, height=h, scale=2)  # type: ignore[return-value]
 
@@ -1974,74 +2003,52 @@ def main() -> None:
                     progress_text.text(f"✓ {fmt.upper()} ready!")
                     st.session_state[f"zip_data_{key_suffix}"] = zip_data
                     st.session_state[f"zip_ready_{key_suffix}"] = True
+                    st.session_state.pop(f"zip_error_{key_suffix}", None)
+                except Exception as exc:  # shown in the UI
+                    # This runs inside an on_click callback: letting the
+                    # exception escape kills the whole page render.
+                    st.session_state[f"zip_ready_{key_suffix}"] = False
+                    st.session_state.pop(f"zip_data_{key_suffix}", None)
+                    st.session_state[f"zip_error_{key_suffix}"] = (
+                        _image_export_message(exc)
+                    )
                 finally:
                     time.sleep(0.5)
                     progress_placeholder.empty()
 
-            # Build callbacks
-            def _build_html():
-                _build_and_store("html", "html")
-
-            def _build_png():
-                _build_and_store("png", "png")
-
-            def _build_svg():
-                _build_and_store("svg", "svg")
+            def _build_column(fmt: str, label: str) -> None:
+                blocker = (
+                    None if fmt == "html" else _image_export_blocker()
+                )
+                st.button(
+                    label=f"🏗️ Build {label} ({len(rendered)})",
+                    on_click=_build_and_store,
+                    args=(fmt, fmt),
+                    key=f"build_{fmt}",
+                    disabled=blocker is not None,
+                )
+                if blocker:
+                    st.caption(blocker)
+                    return
+                error = st.session_state.get(f"zip_error_{fmt}")
+                if error:
+                    st.warning(error)
+                elif st.session_state.get(f"zip_ready_{fmt}", False):
+                    st.download_button(
+                        label=f"📥 Download {label}",
+                        data=st.session_state[f"zip_data_{fmt}"],
+                        file_name=f"plots_{fmt}.zip",
+                        mime="application/zip",
+                        key=f"dl_all_{fmt}",
+                    )
 
             c1, c2, c3 = st.columns(3)
-
             with c1:
-                st.button(
-                    label=f"🏗️ Build HTML ({len(rendered)})",
-                    on_click=_build_html,
-                    key="build_html",
-                )
-                if st.session_state.get("zip_ready_html", False):
-                    st.download_button(
-                        label="📥 Download HTML",
-                        data=st.session_state["zip_data_html"],
-                        file_name="plots_html.zip",
-                        mime="application/zip",
-                        key="dl_all_html",
-                    )
+                _build_column("html", "HTML")
             with c2:
-                try:
-                    st.button(
-                        label=f"🏗️ Build PNG ({len(rendered)})",
-                        on_click=_build_png,
-                        key="build_png",
-                    )
-                    if st.session_state.get("zip_ready_png", False):
-                        st.download_button(
-                            label="📥 Download PNG",
-                            data=st.session_state["zip_data_png"],
-                            file_name="plots_png.zip",
-                            mime="application/zip",
-                            key="dl_all_png",
-                        )
-                except Exception:
-                    st.caption(
-                        "PNG needs `kaleido`: `uv add 'kaleido>=1.0.0'`"
-                    )
+                _build_column("png", "PNG")
             with c3:
-                try:
-                    st.button(
-                        label=f"🏗️ Build SVG ({len(rendered)})",
-                        on_click=_build_svg,
-                        key="build_svg",
-                    )
-                    if st.session_state.get("zip_ready_svg", False):
-                        st.download_button(
-                            label="📥 Download SVG",
-                            data=st.session_state["zip_data_svg"],
-                            file_name="plots_svg.zip",
-                            mime="application/zip",
-                            key="dl_all_svg",
-                        )
-                except Exception:
-                    st.caption(
-                        "SVG needs `kaleido`: `uv add 'kaleido>=1.0.0'`"
-                    )
+                _build_column("svg", "SVG")
 
             with st.expander("Download individual plots"):
                 for pid, fig in rendered:
@@ -2054,7 +2061,7 @@ def main() -> None:
                         mime="text/html",
                         key=f"dl_i_html_{pid}",
                     )
-                    try:
+                    if _image_export_blocker() is None:
                         ic3.download_button(
                             "PNG",
                             data=lambda f=fig: _fig_to_png_bytes(f),
@@ -2062,8 +2069,8 @@ def main() -> None:
                             mime="image/png",
                             key=f"dl_i_png_{pid}",
                         )
-                    except Exception:
-                        ic3.caption("kaleido")
+                    else:
+                        ic3.caption("no PNG")
     else:
         _run_manual_mode(combined)
 
