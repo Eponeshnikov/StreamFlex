@@ -10,7 +10,13 @@ from streamlit.components.v1 import html
 from data_manager import DataManager
 from plugin_manager import PluginManager
 from state_manager import StateManager
-from utils import get_colored_logs, logger_init
+from utils import (
+    STORAGE_ROOTS,
+    all_cache_dirs,
+    all_tmp_dirs,
+    get_colored_logs,
+    logger_init,
+)
 from widget_manager import WidgetManager
 
 
@@ -115,21 +121,18 @@ def get_cache_sizes():
                   'output': {'size_bytes': int, 'formatted': str}
               }
     """
-    sizes = {
-        "tmp": {
-            "size_bytes": get_dir_size(".tmp"),
-            "formatted": format_size(get_dir_size(".tmp")),
-        },
-        "cache": {
-            "size_bytes": get_dir_size(".cache"),
-            "formatted": format_size(get_dir_size(".cache")),
-        },
-        "output": {
-            "size_bytes": get_dir_size("output_data"),
-            "formatted": format_size(get_dir_size("output_data")),
-        },
+    # Summed over every root: the scratch and results locations are per-plugin
+    # choices, so one session's files can sit on both disks and a hard-coded
+    # folder would under-report.
+    totals = {
+        "tmp": sum(get_dir_size(d) for d in all_tmp_dirs()),
+        "cache": sum(get_dir_size(d) for d in all_cache_dirs()),
+        "output": sum(get_dir_size(r) for r in STORAGE_ROOTS.values()),
     }
-    return sizes
+    return {
+        name: {"size_bytes": size, "formatted": format_size(size)}
+        for name, size in totals.items()
+    }
 
 
 def clear_cache_dirs(
@@ -147,65 +150,53 @@ def clear_cache_dirs(
     Returns:
         tuple: (success, message) where success is boolean and message is status string
     """
+
+    def _unlink_files(directory, keep=None):
+        """Delete the plain files directly inside ``directory``.
+
+        ``keep`` filters by ``cache_result``'s ``Category^hash.ext`` naming;
+        None deletes everything. Returns how many files went.
+        """
+        if not os.path.exists(directory):
+            return 0
+        deleted = 0
+        for filename in os.listdir(directory):
+            if keep is not None and filename.split("^")[0] not in keep:
+                continue
+            file_path = os.path.join(directory, filename)
+            try:
+                if os.path.isfile(file_path):
+                    os.unlink(file_path)
+                    deleted += 1
+            except Exception as e:
+                logger.error(f"Failed to delete {file_path}: {e}")
+        return deleted
+
     try:
         cleared = []
 
-        # Always clear .tmp directory
-        tmp_dir = ".tmp"
-        if os.path.exists(tmp_dir):
-            for filename in os.listdir(tmp_dir):
-                file_path = os.path.join(tmp_dir, filename)
-                try:
-                    if os.path.isfile(file_path):
-                        os.unlink(file_path)
-                except Exception as e:
-                    logger.error(f"Failed to delete {file_path}: {e}")
+        # Always clear .tmp — on every scratch root, since the location is a
+        # per-plugin choice and one session can spread over both disks.
+        # sum(), not any(): any() short-circuits and would leave the second
+        # root untouched.
+        if sum(_unlink_files(d) for d in all_tmp_dirs()):
             cleared.append("temporary files")
 
-        # Clear .cache directory
+        # Clear .cache directories
         if clear_cache:
-            cache_dir = ".cache"
-            if os.path.exists(cache_dir):
-                if cache_categories:
-                    # Clear only selected categories
-                    for filename in os.listdir(cache_dir):
-                        # Split on '^' to get category (new format: Category^hash.extension)
-                        file_category = filename.split("^")[0]
-                        if file_category in cache_categories:
-                            file_path = os.path.join(cache_dir, filename)
-                            try:
-                                if os.path.isfile(file_path):
-                                    os.unlink(file_path)
-                            except Exception as e:
-                                logger.error(
-                                    f"Failed to delete {file_path}: {e}"
-                                )
-                    cleared.append(
-                        f"selected cache categories: {', '.join(cache_categories)}"
-                    )
-                else:
-                    # Clear entire cache
-                    for filename in os.listdir(cache_dir):
-                        file_path = os.path.join(cache_dir, filename)
-                        try:
-                            if os.path.isfile(file_path):
-                                os.unlink(file_path)
-                        except Exception as e:
-                            logger.error(f"Failed to delete {file_path}: {e}")
-                    cleared.append("entire cache")
+            categories = set(cache_categories) if cache_categories else None
+            if sum(_unlink_files(d, categories) for d in all_cache_dirs()):
+                cleared.append(
+                    f"selected cache categories: {', '.join(cache_categories)}"
+                    if cache_categories
+                    else "entire cache"
+                )
 
-        # Clear output_data directory
-        if clear_output:
-            output_dir = "output_data"
-            if os.path.exists(output_dir):
-                for filename in os.listdir(output_dir):
-                    file_path = os.path.join(output_dir, filename)
-                    try:
-                        if os.path.isfile(file_path):
-                            os.unlink(file_path)
-                    except Exception as e:
-                        logger.error(f"Failed to delete {file_path}: {e}")
-                cleared.append("output files")
+        # Clear the results roots
+        if clear_output and sum(
+            _unlink_files(root) for root in STORAGE_ROOTS.values()
+        ):
+            cleared.append("output files")
 
         if not cleared:
             return False, "Nothing was cleared (no options selected)"
@@ -217,79 +208,99 @@ def clear_cache_dirs(
         return False, f"Failed to clear: {e!s}"
 
 
-PLUGIN_OUTPUT_ROOT = os.path.join("output_data", "plugins")
+# One ``plugins/`` directory per results root: which disk a run landed on is
+# a per-plugin choice, so both have to be listed and both have to stay
+# deletable.
+PLUGIN_OUTPUT_ROOTS = tuple(
+    os.path.join(root, "plugins") for root in STORAGE_ROOTS.values()
+)
 
 
-def list_plugin_outputs(root=PLUGIN_OUTPUT_ROOT):
+def list_plugin_outputs(roots=PLUGIN_OUTPUT_ROOTS):
     """
-    Enumerate the per-run artifacts each plugin writes under output_data/plugins.
+    Enumerate the per-run artifacts each plugin writes under <root>/plugins.
 
     Plugins with a "save results to file" option (SignalChannelizer,
     OptiReceiver) dump their heavy payloads into
-    ``output_data/plugins/<plugin>/<timestamp>/``, and ResultsSaver writes its
-    parquets next to them. Those are the only parts of output_data that are
+    ``<root>/plugins/<plugin>/<timestamp>/``, and ResultsSaver writes its
+    parquets next to them. Those are the only parts of a results root that are
     disposable once the results have been processed — everything else
     (processed/, dataset/, models/, first_component/) must stay.
 
     Args:
-        root (str): Base folder holding the per-plugin subfolders.
+        roots (tuple): Base folders holding the per-plugin subfolders.
 
     Returns:
         dict: ``{plugin_name: [(entry_name, path, size_bytes), ...]}`` with the
-              entries of every plugin sorted newest first.
+              entries of every plugin sorted newest first, merged across roots.
     """
-    outputs = {}
-    if not os.path.isdir(root):
-        return outputs
-
-    for plugin_name in sorted(os.listdir(root)):
-        plugin_dir = os.path.join(root, plugin_name)
-        if not os.path.isdir(plugin_dir):
+    if isinstance(roots, str):
+        roots = (roots,)
+    collected = {}
+    for root in roots:
+        if not os.path.isdir(root):
             continue
-
-        entries = []
-        for entry_name in os.listdir(plugin_dir):
-            entry_path = os.path.join(plugin_dir, entry_name)
-            try:
-                size = (
-                    get_dir_size(entry_path)
-                    if os.path.isdir(entry_path)
-                    else os.path.getsize(entry_path)
-                )
-                mtime = os.path.getmtime(entry_path)
-            except OSError:
+        for plugin_name in os.listdir(root):
+            plugin_dir = os.path.join(root, plugin_name)
+            if not os.path.isdir(plugin_dir):
                 continue
-            entries.append((entry_name, entry_path, size, mtime))
+            entries = collected.setdefault(plugin_name, [])
+            for entry_name in os.listdir(plugin_dir):
+                entry_path = os.path.join(plugin_dir, entry_name)
+                try:
+                    size = (
+                        get_dir_size(entry_path)
+                        if os.path.isdir(entry_path)
+                        else os.path.getsize(entry_path)
+                    )
+                    mtime = os.path.getmtime(entry_path)
+                except OSError:
+                    continue
+                entries.append((entry_name, entry_path, size, mtime))
 
-        entries.sort(key=lambda item: item[3], reverse=True)
+    outputs = {}
+    for plugin_name in sorted(collected):
+        entries = sorted(
+            collected[plugin_name], key=lambda item: item[3], reverse=True
+        )
         outputs[plugin_name] = [
             (name, path, size) for name, path, size, _ in entries
         ]
     return outputs
 
 
-def delete_plugin_outputs(paths, root=PLUGIN_OUTPUT_ROOT):
+def delete_plugin_outputs(paths, roots=PLUGIN_OUTPUT_ROOTS):
     """
-    Delete plugin run folders/files, refusing anything outside output_data/plugins.
+    Delete plugin run folders/files, refusing anything outside a plugins/ root.
 
     Args:
         paths (list): Paths previously reported by :func:`list_plugin_outputs`.
-        root (str): Guard directory — nothing outside it is ever removed.
+        roots (tuple): Guard directories — nothing outside them is removed.
 
     Returns:
         tuple: ``(removed, freed_bytes, errors)``
     """
-    root_abs = os.path.abspath(root)
+    if isinstance(roots, str):
+        roots = (roots,)
+    roots_abs = [os.path.abspath(root) for root in roots]
     removed, errors = [], []
     freed = 0
 
+    def _inside_a_root(path_abs):
+        for root_abs in roots_abs:
+            if path_abs == root_abs:
+                return False  # the root itself is never a deletable entry
+            try:
+                if os.path.commonpath([root_abs, path_abs]) == root_abs:
+                    return True
+            except ValueError:
+                continue
+        return False
+
     for path in paths:
         path_abs = os.path.abspath(path)
-        if (
-            path_abs == root_abs
-            or os.path.commonpath([root_abs, path_abs]) != root_abs
-        ):
-            errors.append(f"{path}: outside {root}, skipped")
+        if not _inside_a_root(path_abs):
+            errors.append(f"{path}: outside {', '.join(roots)}, skipped")
             continue
         try:
             if os.path.isdir(path_abs):
@@ -400,7 +411,7 @@ def cache_management_ui():
         with col4:
             st.metric(
                 "Plugin Outputs Size",
-                format_size(get_dir_size(PLUGIN_OUTPUT_ROOT)),
+                format_size(sum(get_dir_size(r) for r in PLUGIN_OUTPUT_ROOTS)),
             )
         # Cache files section
         clear_select = st.pills(
