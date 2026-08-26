@@ -1065,7 +1065,7 @@ DATA_DISK_STORAGE_ROOT = os.path.join(
 )
 
 # Label -> root. Insertion order is the order of the segmented control.
-STORAGE_ROOTS = OrderedDict(
+STORAGE_ROOTS: "OrderedDict[str, str]" = OrderedDict(
     (
         ("Project", PROJECT_STORAGE_ROOT),
         ("Data disk", DATA_DISK_STORAGE_ROOT),
@@ -1083,7 +1083,7 @@ STORAGE_ROOT_ENV = "STREAMFLEX_STORAGE_ROOT"
 # or the other way round.
 PROJECT_SCRATCH_ROOT = "."
 DATA_DISK_SCRATCH_ROOT = os.path.join(DATA_DISK_MOUNT, "streamflex")
-SCRATCH_ROOTS = OrderedDict(
+SCRATCH_ROOTS: "OrderedDict[str, str]" = OrderedDict(
     (
         ("Project", PROJECT_SCRATCH_ROOT),
         ("Data disk", DATA_DISK_SCRATCH_ROOT),
