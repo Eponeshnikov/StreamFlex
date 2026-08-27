@@ -2534,8 +2534,20 @@ def visualization_time_control(
     return start + local_index, None
 
 
-def add_plotly_frame_slider(fig, labels, *, prefix="Time step: "):
-    """Attach browser-side frame scrubbing and play/pause controls."""
+def add_plotly_frame_slider(
+    fig, labels, *, prefix="Time step: ", redraw=False
+):
+    """Attach browser-side frame scrubbing and play/pause controls.
+
+    ``redraw=False`` is the cheap path: Plotly updates the traces in place and
+    skips a full replot. It is also the *only* path that works for plain
+    ``scatter`` data and nothing else — a frame that changes the layout (a
+    title, a subplot annotation) or that carries WebGL traces (``scattergl``)
+    is simply not repainted, so the chart sits on frame 0 while the slider
+    moves. Pass ``redraw=True`` for those.
+    """
+    frame_options = {"duration": 0, "redraw": bool(redraw)}
+    play_options = {"duration": 120, "redraw": bool(redraw)}
     steps = [
         {
             "method": "animate",
@@ -2544,7 +2556,7 @@ def add_plotly_frame_slider(fig, labels, *, prefix="Time step: "):
                 [str(index)],
                 {
                     "mode": "immediate",
-                    "frame": {"duration": 0, "redraw": False},
+                    "frame": dict(frame_options),
                     "transition": {"duration": 0},
                 },
             ],
@@ -2579,7 +2591,7 @@ def add_plotly_frame_slider(fig, labels, *, prefix="Time step: "):
                             None,
                             {
                                 "fromcurrent": True,
-                                "frame": {"duration": 120, "redraw": False},
+                                "frame": dict(play_options),
                                 "transition": {"duration": 0},
                             },
                         ],
@@ -2591,7 +2603,7 @@ def add_plotly_frame_slider(fig, labels, *, prefix="Time step: "):
                             [None],
                             {
                                 "mode": "immediate",
-                                "frame": {"duration": 0, "redraw": False},
+                                "frame": dict(frame_options),
                             },
                         ],
                     },
