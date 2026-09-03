@@ -187,3 +187,8 @@ other_docs
 sionna-scenes
 *.json
 test*
+# Keep the offline-keygen regression suite reviewable even though legacy
+# top-level test artifacts remain ignored by the broad rule above.
+!tests/
+tests/*
+!tests/test_offline_keygen.py
