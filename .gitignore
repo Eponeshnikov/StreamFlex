@@ -191,4 +191,4 @@ test*
 # top-level test artifacts remain ignored by the broad rule above.
 !tests/
 tests/*
-!tests/test_offline_keygen.py
+tests/test_offline_keygen.py
