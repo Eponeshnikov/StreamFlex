@@ -65,6 +65,11 @@ iqgenerator = [
 
 ]
 opti-receiver = [
+    # Imported directly for the loky config-level parallelism. joblib 1.6
+    # dropped its vendored cloudpickle, so relying on it transitively is how
+    # `from joblib.externals import cloudpickle` broke on an upgrade.
+    "cloudpickle>=3.1",
+    "joblib>=1.6",
     "plotly>=6.0.1",
     "pywavelets>=1.8.0",
     "sionna>=2.0.1",
@@ -89,6 +94,9 @@ resultssaverplugin = [
     "tables>=3.10.2",
 ]
 signal-channelizer = [
+    # See opti-receiver: both plugins import these directly for loky.
+    "cloudpickle>=3.1",
+    "joblib>=1.6",
     "plotly>=6.0.1",
     "sionna>=2.0.1",
 

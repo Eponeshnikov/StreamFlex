@@ -15,7 +15,10 @@ from utils import (
     all_cache_dirs,
     all_tmp_dirs,
     get_colored_logs,
+    gpu_memory_held_bytes,
     logger_init,
+    release_gpu_memory,
+    release_worker_pool,
 )
 from widget_manager import WidgetManager
 
@@ -813,6 +816,7 @@ def main():
                 with st.container():
                     plugin = plugin_mgr.plugins.get(plugin_name)
                     if plugin:
+                        held_before = gpu_memory_held_bytes()
                         try:
                             toc.header(f"{plugin_name}")
                             if rerun_scope is not None:
@@ -831,6 +835,38 @@ def main():
                                 f"{type(e).__module__}.{type(e).__name__}: {e!r}"
                             )
                             raise
+                        finally:
+                            # Hand the cached VRAM back between stages,
+                            # failure and interruption included. Two things
+                            # hold it after a stage is done: the plugin's own
+                            # allocator (Sionna RT's Dr.Jit pool especially)
+                            # and the idle loky workers, one CUDA context
+                            # each. The next plugin in the chain is the one
+                            # that OOMs on them.
+                            pool = release_worker_pool()
+                            freed = release_gpu_memory()
+                            # Log what is still held, not only what came
+                            # back: Dr.Jit's share reports as zero to torch
+                            # and cannot be freed, so "released 0.00" alone
+                            # never says whether a stage left the card busy.
+                            held = gpu_memory_held_bytes()
+
+                            def _gib(value):
+                                return (
+                                    "unknown"
+                                    if value is None
+                                    else f"{value / 1024**3:.2f} GiB"
+                                )
+
+                            logger.info(
+                                "VRAM {}: {} -> {} held, {:.2f} GiB "
+                                "released{}",
+                                plugin_name,
+                                _gib(held_before),
+                                _gib(held),
+                                freed / 1024**3,
+                                " (worker pool shut down)" if pool else "",
+                            )
             toc.generate()
         else:
             st.info(

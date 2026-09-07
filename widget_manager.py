@@ -73,6 +73,20 @@ class WidgetManager:
             )
             return False
 
+    def peek_widget_state(self, plugin_name, widget_key, default=None):
+        """Read a saved value without touching the ``current_value`` cache.
+
+        :meth:`load_widget_state` *registers* whatever it returns, and the
+        first caller to register a key owns it for the rest of the session.
+        Anything that inspects a widget's saved value before the widget
+        itself renders — a preset that rewrites it, a path that is rebased
+        onto another disk — must use this instead, or the widget will be
+        handed that caller's default rather than its own.
+        """
+        return st.session_state.get("widget_states", {}).get(
+            plugin_name, {}
+        ).get(widget_key, default)
+
     def load_widget_state(self, plugin_name, widget_key, default=None):
         """
         Load widget state with existence checking.
@@ -199,21 +213,29 @@ class WidgetManager:
             if not isinstance(state, dict):
                 raise TypeError("Invalid state format")
 
+            # Every plugin the outgoing session touched, not only the ones the
+            # snapshot carries: a widget the previous session set and this
+            # snapshot never saw has to fall back to its own default, or
+            # loading a snapshot is a merge with whatever was on screen rather
+            # than a restore of what was saved.
+            prefixes = {
+                f"{plugin_name}_"
+                for plugin_name in (
+                    set(state) | set(st.session_state.widget_states)
+                )
+            }
             st.session_state.widget_states = state.copy()
             # Clear current_value so widgets re-read from imported widget_states
             # instead of using stale cached values from the previous session
             st.session_state.current_value = {}
             # Clear Streamlit's own widget keys so widgets pick up imported
-            # values instead of using stale session_state entries
-            for plugin_name, plugin_state in state.items():
-                for widget_key in plugin_state:
-                    full_key = f"{plugin_name}_{widget_key}"
-                    # Preset-driven widgets keep the persistence key stable but
-                    # rotate their Streamlit frontend key with a suffix.
-                    for session_key in list(st.session_state.keys()):
-                        name = str(session_key)
-                        if name == full_key or name.startswith(full_key + "_"):
-                            del st.session_state[session_key]
+            # values instead of using stale session_state entries. Matching on
+            # the plugin prefix also catches the suffixed frontend keys that
+            # preset-driven widgets rotate through.
+            for session_key in list(st.session_state.keys()):
+                name = str(session_key)
+                if any(name.startswith(prefix) for prefix in prefixes):
+                    del st.session_state[session_key]
             self.logger.success(
                 "Imported widget states: {plugins} plugins, {widgets} widgets",
                 plugins=len(state),

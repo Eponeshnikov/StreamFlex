@@ -7,13 +7,15 @@ import json
 import numbers
 import os
 import pickle
+import subprocess
 import sys
 import threading
 import traceback
 from collections import OrderedDict
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
-from typing import Literal, cast, overload
+from typing import Any, Literal, cast, overload
 
 import drjit as dr
 import numpy as np
@@ -2913,6 +2915,254 @@ def available_memory_bytes():
     if cgroup_available is not None:
         return min(host_available, cgroup_available)
     return host_available
+
+
+def release_gpu_memory():
+    """Return this process' cached VRAM to the driver.
+
+    Two caching allocators are in play and freeing one does nothing for the
+    other: torch's, which the heavy plugins allocate through, and Dr.Jit's,
+    which Sionna RT allocates through.
+
+    Only the torch half actually comes back. ``dr.flush_malloc_cache()`` is
+    the documented API and is called here, but measured on Dr.Jit 1.3.1 +
+    CUDA it returns nothing to the driver: allocate and free three buffers
+    and the process still holds every byte, so a finished ray-tracing run
+    stays resident for the life of the Streamlit process (7.1 GiB of a
+    24 GiB card, on the 2026-09-07 trajectory run). Keep the call — it is
+    correct, cheap, and covers host-pinned blocks and future versions — but
+    do not count on it for VRAM. The way to not lose the card to Sionna RT
+    is to allocate less of it in the first place.
+
+    Every call is best-effort: a CPU-only box, a driver that is already
+    gone, or a Dr.Jit built without the CUDA backend must not take a plugin
+    run down on the way out. Returns the bytes handed back, or 0 when there
+    is no GPU to ask.
+    """
+    try:
+        import torch
+
+        if not torch.cuda.is_available():
+            return 0
+        before, _total = torch.cuda.mem_get_info()
+    except Exception:
+        return 0
+    try:
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
+    except Exception:
+        pass
+    try:
+        import drjit as dr
+
+        dr.flush_malloc_cache()
+    except Exception:
+        pass
+    try:
+        after, _total = torch.cuda.mem_get_info()
+        return max(0, int(after) - int(before))
+    except Exception:
+        return 0
+
+
+def release_worker_pool():
+    """Shut the idle joblib/loky pool down instead of waiting it out.
+
+    joblib keeps its executor warm for reuse, and every worker holds a CUDA
+    context of its own — ~420 MiB, so an ``n_jobs=16`` stage parks ~6.5 GiB
+    of pure overhead on the card. The pool *is* reaped on joblib's idle
+    timeout, but that timeout is minutes, which is exactly when the next
+    stage of the chain starts and finds the card full.
+
+    Reads loky's module-level singleton rather than calling
+    ``get_reusable_executor()``: the public accessor *starts* a pool when
+    none exists, which would spawn the very workers this is meant to drop.
+    Returns True when a pool was actually shut down.
+    """
+    try:
+        from joblib.externals.loky import reusable_executor
+
+        executor = getattr(reusable_executor, "_executor", None)
+        if executor is None:
+            return False
+        executor.shutdown(wait=True)
+        return True
+    except Exception:
+        return False
+
+
+def gpu_memory_held_bytes():
+    """VRAM this process holds, or None when it cannot be read.
+
+    Torch only knows about its own allocator, and the memory that matters
+    here is Dr.Jit's — which torch reports as zero and cannot free. So ask
+    the driver for the per-process figure instead. Best-effort: no GPU, no
+    ``nvidia-smi``, or a container without visibility all return None rather
+    than raising in a ``finally``.
+    """
+    try:
+        out = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-compute-apps=pid,used_memory",
+                "--format=csv,noheader,nounits",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    me = os.getpid()
+    for line in out.splitlines():
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) == 2 and parts[0].isdigit() and int(parts[0]) == me:
+            try:
+                return int(float(parts[1])) * 1024**2
+            except ValueError:
+                return None
+    return 0
+
+
+GPU_JOB_CACHE_ENTRIES = 4
+
+
+@st.cache_resource(show_spinner=False)
+def _gpu_job_store():
+    """Results of work sent to a child process, shared per server.
+
+    Same shape as ``_scene_mesh_store``: a plain dict under a lock, with the
+    cache decorator only making it a singleton. The executor itself is
+    loky's — the two heavy plugins already drive it under Streamlit, and it
+    solves the spawn/``__main__`` problem that bare
+    ``multiprocessing`` would re-run the page over.
+    """
+    return {
+        "done": OrderedDict(),
+        "running": {},
+        "warm": set(),
+        "lock": threading.Lock(),
+    }
+
+
+@overload
+def submit_gpu_job[T](
+    key: str,
+    fn: Callable[..., T],
+    *args: Any,
+    background: Literal[False],
+    warm_group: str | None = ...,
+    **kwargs: Any,
+) -> T: ...
+
+
+@overload
+def submit_gpu_job[T](
+    key: str,
+    fn: Callable[..., T],
+    *args: Any,
+    background: bool = ...,
+    warm_group: str | None = ...,
+    **kwargs: Any,
+) -> T | None: ...
+
+
+def submit_gpu_job(
+    key, fn, *args, background=True, warm_group=None, **kwargs
+):
+    """Run ``fn`` in a child process and reclaim its VRAM when it is done.
+
+    This is the only way to get GPU memory back from Sionna RT: Dr.Jit's
+    allocator never returns device memory to the driver (see
+    ``release_gpu_memory``), so the process that ray-traces has to be a
+    process that exits. Measured on an LOD3 city, spawning the child,
+    importing ``sionna.rt`` and loading the scene costs 0.8 s total, against
+    minutes for the solve it replaces.
+
+    ``submit`` returns in ~1 ms, so with ``background=True`` the script
+    thread is never blocked: the first call returns ``None`` and the caller
+    draws a placeholder and polls, the way ``scene_mesh_parts`` does. Set
+    ``background=False`` to wait for the result inline (tests, workers).
+
+    ``fn`` must be importable by qualified name in a fresh interpreter, so
+    it belongs in a module like ``pages/rt_solver_worker.py`` — not in a
+    plugin loaded through ``importlib`` under a synthetic name, and not in a
+    closure.
+    """
+    from joblib.externals.loky import get_reusable_executor
+
+    store = _gpu_job_store()
+    with store["lock"]:
+        if key in store["done"]:
+            store["done"].move_to_end(key)
+            return store["done"][key]
+        pending = store["running"].get(key)
+        if pending is None:
+            pending = get_reusable_executor(max_workers=1).submit(
+                fn, *args, **kwargs
+            )
+            store["running"][key] = pending
+        if background and not pending.done():
+            return None
+
+    try:
+        result = pending.result()
+    except Exception:
+        # Drop the failed job so the next rerun retries instead of
+        # re-raising the same stale future forever.
+        with store["lock"]:
+            store["running"].pop(key, None)
+        _reclaim_idle_gpu_worker(store)
+        raise
+
+    with store["lock"]:
+        store["running"].pop(key, None)
+        store["done"][key] = result
+        while len(store["done"]) > GPU_JOB_CACHE_ENTRIES:
+            store["done"].popitem(last=False)
+        if warm_group is not None:
+            store["warm"].add(warm_group)
+    _reclaim_idle_gpu_worker(store)
+    return result
+
+
+def release_gpu_worker(warm_group):
+    """Drop a keep-warm claim and kill the worker once none are left.
+
+    The counterpart to ``submit_gpu_job(warm_group=...)``: while a group is
+    registered the child survives between calls, so the scene it loaded stays
+    warm and the next render is just a figure build. Releasing the last group
+    ends the process, and *that* is what returns its VRAM — deleting the
+    scene inside it would not (measured: load 892 MiB, delete, flush, still
+    892 MiB).
+    """
+    store = _gpu_job_store()
+    with store["lock"]:
+        store["warm"].discard(warm_group)
+        # Cached figures belong to the process that made them; keeping them
+        # would hand back results for a scene that no longer exists.
+        for cached in [k for k in store["done"] if _in_group(k, warm_group)]:
+            del store["done"][cached]
+    return _reclaim_idle_gpu_worker(store)
+
+
+def _in_group(key, warm_group):
+    return isinstance(key, str) and key.startswith(f"{warm_group}:")
+
+
+def _reclaim_idle_gpu_worker(store):
+    """Kill the worker once nothing is queued — that is what frees the VRAM.
+
+    Only when the store is idle: the executor has one worker, so shutting it
+    down while another job is pending would abort that job too — and only
+    when nothing has claimed the worker with ``warm_group``, since killing it
+    would throw away the scene that claim exists to keep loaded.
+    """
+    with store["lock"]:
+        if store["running"] or store["warm"]:
+            return False
+    return release_worker_pool()
 
 
 def parquet_uncompressed_bytes_per_row(file_path):
