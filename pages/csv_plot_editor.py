@@ -294,6 +294,40 @@ def _compute_finite_event_model(
     # count ratio cancels from that normalization.
     df["positional_agreement_percent"] = 100.0 * correct_fraction
 
+    return _add_entropy_columns(
+        df,
+        spec,
+        n_values,
+        correct_fraction,
+        n_column=n_column,
+        output_column=spec.get(
+            "entropy_output_column", "entropy_output_finite"
+        ),
+        realized_column=spec.get(
+            "realized_percent_column", "entropy_potential_realized_percent"
+        ),
+    )
+
+
+def _add_entropy_columns(
+    df: pd.DataFrame,
+    spec: dict[str, Any],
+    n_values: np.ndarray,
+    correct_fraction: np.ndarray,
+    *,
+    n_column: str,
+    output_column: str,
+    realized_column: str,
+) -> pd.DataFrame:
+    """Weight the joint delay entropy by an interval-agreement probability.
+
+    ``correct_fraction`` is whatever the caller measured or modelled as the
+    probability that a positional interval means the same thing on both sides:
+    the old positional formula for :func:`_compute_finite_event_model`, the
+    Monte-Carlo's own ``Interval Match Probability`` for
+    :func:`_compute_event_bdr_model`.  Everything below is identical either
+    way, so the two models differ only in that one number.
+    """
     entropy_order = np.maximum(n_values - 1.0, 0.0)
     joint_entropy = spec.get("joint_entropy")
     joint_entropy_by = spec.get("joint_entropy_by")
@@ -324,7 +358,7 @@ def _compute_finite_event_model(
             )
     if entropy_values is not None:
         df["joint_entropy_observable"] = entropy_values
-        df["entropy_output_finite"] = correct_fraction * entropy_values
+        df[output_column] = correct_fraction * entropy_values
 
         # Estimate true components from the deepest saved Top-N row of every
         # configuration. Category percentages use the true-ray count as their
@@ -428,10 +462,76 @@ def _compute_finite_event_model(
                 potential_order, max_measured_order
             )
             df["potential_joint_entropy"] = potential_entropy
-            df["entropy_potential_realized_percent"] = np.clip(
-                realized_percent, 0.0, 100.0
-            )
+            df[realized_column] = np.clip(realized_percent, 0.0, 100.0)
     return df
+
+
+def _compute_event_bdr_model(
+    df: pd.DataFrame, spec: dict[str, Any]
+) -> pd.DataFrame:
+    """Read the BDR the A–G Monte-Carlo already measured, and weight entropy.
+
+    The positional model above derives an interval-agreement probability from
+    ``Pair Percentage`` through a merged-list random walk, then reports
+    ``BDR = 50 % · (1 − p)``.  That expression is the reviewer's formula (4)
+    with ``p_e^mismatch = 0.5`` and ``p_e^match = 0`` — neither of which the
+    data supports.  The global-analysis page now simulates the whole chain
+    (A–G outcomes → component lists → intervals → Gray-coded equal-mass
+    quantiser → bits) and exports the result per configuration, so this model
+    reads those columns instead of re-deriving anything:
+
+        BDR = p_e^mismatch · (1 − p_match) + p_e^match · p_match
+
+    with all three terms measured on the run.  ``K̄ = 2n/(1+c)`` and the fitted
+    ``c`` do not appear at all.
+    """
+    match_column = spec.get("match_column", "Interval Match Probability")
+    bdr_column = spec.get("bdr_column", "BDR (Monte-Carlo)")
+    n_column = spec.get(
+        "recognized_column", "Average Number of Recognized Rays"
+    )
+    missing = [
+        c for c in (match_column, bdr_column, n_column) if c not in df.columns
+    ]
+    if missing:
+        raise KeyError(f"Measured BDR columns are missing: {missing!r}")
+
+    n_values = _series(_numeric(df[n_column]).fillna(0.0)).to_numpy()
+    p_match = (
+        _series(_numeric(df[match_column])).clip(0.0, 1.0).to_numpy()
+    )
+    bdr = _series(_numeric(df[bdr_column])).clip(0.0, 1.0).to_numpy()
+
+    df["n_components_cir"] = n_values
+    df["p_match_measured"] = p_match
+    df["p_match_measured_percent"] = 100.0 * p_match
+    df["bdr_event_percent"] = 100.0 * bdr
+
+    # The decomposition of (4′), in percent, so a figure can show that neither
+    # of the old assumptions holds.
+    for name, column in (
+        ("p_err_match_percent", "Bit Error | Matched Interval"),
+        ("p_err_mismatch_percent", "Bit Error | Mismatched Interval"),
+        ("bdr_formula_percent", "BDR (Formula)"),
+    ):
+        if column in df.columns:
+            df[name] = 100.0 * _numeric(df[column]).to_numpy()
+
+    return _add_entropy_columns(
+        df,
+        spec,
+        n_values,
+        p_match,
+        n_column=n_column,
+        output_column=spec.get(
+            "entropy_output_column", "entropy_output_event"
+        ),
+        realized_column=spec.get(
+            "realized_percent_column",
+            "entropy_potential_realized_percent_event",
+        ),
+    )
+
 
 
 def _compute_time_resolution_energy(
@@ -482,6 +582,12 @@ def _compute_columns(
                 df = _compute_finite_event_model(df, spec)
             except Exception as exc:
                 st.warning(f"Finite-event positional model failed: {exc}")
+            continue
+        if spec.get("model") == "event_bdr":
+            try:
+                df = _compute_event_bdr_model(df, spec)
+            except Exception as exc:
+                st.warning(f"Measured event BDR model failed: {exc}")
             continue
         if spec.get("model") == "time_resolution_energy":
             try:

@@ -2447,6 +2447,39 @@ def duplex_batch_pair(value, batch_size, selected_batch=0):
     ]
 
 
+# Ceilings for the smooth-animation mode. Every frame carries a full copy of
+# the traces, and nothing about the axis bounds them: a trajectory run has one
+# time step per RX point, so 3000 points became 3000 frames and the Signal
+# Channelizer pushed a single 361 MB delta on 2026-09-07. The client could not
+# drain it, the websocket dropped, and the disconnect killed the OptiReceiver
+# stage that was running behind it (see `session_guard`). Frames are the only
+# lever here: the samples inside one frame are the waveform itself, and
+# thinning those is what makes a pulse or a peak stop being where it is.
+MAX_ANIMATION_FRAMES = 200
+MAX_ANIMATION_PAYLOAD_BYTES = 24 * 1024**2
+
+
+def _decimate_animation_indices(start, count, frame_bytes, ui):
+    """Stride an animation's time indices down to a sendable frame count."""
+    indices = list(range(start, start + count))
+    allowed = MAX_ANIMATION_FRAMES
+    if frame_bytes:
+        allowed = min(
+            allowed, max(1, int(MAX_ANIMATION_PAYLOAD_BYTES // frame_bytes))
+        )
+    if len(indices) <= allowed:
+        return indices
+
+    step = int(np.ceil(len(indices) / allowed))
+    strided = indices[::step]
+    ui.caption(
+        f"Animation shows every {step}th step ({len(strided)} of {count} "
+        "frames) — the full set would not survive the websocket. Switch to "
+        "the slider for an exact step."
+    )
+    return strided
+
+
 def visualization_time_control(
     plugin_instance,
     widget_manager,
@@ -2455,6 +2488,7 @@ def visualization_time_control(
     *,
     key_prefix,
     container=None,
+    frame_bytes=None,
 ):
     """Shared Streamlit/smooth-Plotly time control for result visualizers.
 
@@ -2462,6 +2496,13 @@ def visualization_time_control(
     ``None`` for the Streamlit slider and a list of absolute time indices for
     client-side Plotly animation. Trajectory metadata narrows both modes to the
     selected trajectory segment.
+
+    ``frame_bytes`` is the caller's estimate of what one animation frame costs
+    on the wire (trace samples times their item size, once per trace). When
+    given, the frame count is capped by payload rather than by the flat
+    ``MAX_ANIMATION_FRAMES``, and the returned indices are strided over the
+    full span — the animation still covers the whole trajectory, at a coarser
+    step. The slider mode is never decimated: it sends one frame.
     """
     ui = container if container is not None else st
     count_total = max(1, int(num_time_steps))
@@ -2520,7 +2561,9 @@ def visualization_time_control(
         rerun_scope="fragment",
     )
     if str(mode).startswith("Smooth"):
-        return start, list(range(start, start + count))
+        return start, _decimate_animation_indices(
+            start, count, frame_bytes, ui
+        )
     local_index = int(
         plugin_instance.create_widget(
             widget_manager=widget_manager,

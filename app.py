@@ -3,6 +3,13 @@ import os
 import streamlit as st
 import yaml  # Required to parse the config file
 
+from session_guard import install_session_guards
+
+# Every page runs through this entry script, so this is the one place that
+# covers the offline pages too: without it a closed tab aborts a peaks-
+# processing or training run exactly the way it aborts a plugin chain.
+install_session_guards()
+
 
 # --- Helper Function for Formatting Titles ---
 def format_title(filename):

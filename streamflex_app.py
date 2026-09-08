@@ -1,5 +1,6 @@
 import os
 import shutil
+import time
 from datetime import datetime
 
 import psutil
@@ -9,7 +10,8 @@ from streamlit.components.v1 import html
 
 from data_manager import DataManager
 from plugin_manager import PluginManager
-from state_manager import StateManager
+from session_guard import install_session_guards
+from state_manager import AUTOSAVE_NAME, StateManager
 from utils import (
     STORAGE_ROOTS,
     all_cache_dirs,
@@ -606,6 +608,9 @@ def _trace_session_events():
 
 
 _trace_session_events()
+# Also installed from app.py, which is what covers the offline pages; the
+# call is idempotent and keeps this module standalone.
+install_session_guards()
 
 
 def load_monitor():
@@ -661,6 +666,125 @@ def rerun_bttn():
         st.rerun(scope="app")
 
 
+def autoresume_state(state_mgr, data_mgr, widget_mgr):
+    """Load the autosaved state into a fresh session, once.
+
+    A reload always gets a new session (streamlit's reconnect id never leaves
+    the page it was created in), so this is what makes closing the browser and
+    coming back continue instead of reset. `session_guard` covers the other
+    half: the run itself is not stopped when the tab goes away.
+
+    Must be called before the plugin multiselect is created — the restored
+    selection is written straight into its session-state key.
+    """
+    if st.session_state.get("_autosave_restored"):
+        return
+    # Set before restoring, not after: a failed restore must not be retried on
+    # every rerun of the session.
+    st.session_state["_autosave_restored"] = True
+
+    if not state_mgr.autosave_settings().get("enabled", True):
+        return
+    if not state_mgr.autosave_status():
+        return
+
+    with st.spinner("♻️ Restoring the previous session..."):
+        selected_plugins = state_mgr.restore_autosave(data_mgr, widget_mgr)
+    if selected_plugins is None:
+        return
+
+    st.session_state["selected_plugins"] = selected_plugins
+    st.session_state["_autosave_resumed"] = True
+    logger.info(
+        "Resumed session from autosave with {} plugins selected",
+        len(selected_plugins),
+    )
+
+
+def autosave_state(state_mgr, data_mgr, widget_mgr):
+    """Write the autosave at the end of a run. Never raises at the caller.
+
+    The widgets half is written every run; the data bus is throttled by
+    `autosave_data_due`, since it can run to gigabytes. A failure disables
+    further attempts for this session rather than repeating the same
+    traceback on every rerun — an unpicklable object in the data bus would
+    otherwise fail forever.
+    """
+    if not state_mgr.autosave_settings().get("enabled", True):
+        return
+    if st.session_state.get("_autosave_broken"):
+        return
+
+    include_data = state_mgr.autosave_data_due(
+        st.session_state.get("_autosave_duration", 0.0),
+        st.session_state.get("_autosave_written_at"),
+    )
+    try:
+        duration = state_mgr.autosave(
+            data_mgr,
+            widget_mgr,
+            st.session_state.get("selected_plugins", []),
+            include_data=include_data,
+        )
+    except Exception as e:
+        st.session_state["_autosave_broken"] = True
+        logger.warning("Autosave disabled for this session: {}", e)
+        return
+
+    if include_data:
+        st.session_state["_autosave_duration"] = duration
+        st.session_state["_autosave_written_at"] = time.time()
+
+
+def autosave_ui(state_mgr, data_mgr, widget_mgr):
+    """Sidebar controls for the autosave: toggle, status, restore, delete."""
+    settings = state_mgr.autosave_settings()
+    enabled = st.toggle(
+        "Resume after reload",
+        value=settings.get("enabled", True),
+        help=(
+            "Save widgets and the data bus to snapshots/_autosave*.pkl and "
+            "load them back into the next session. Widgets are written every "
+            "run; the data bus at most every few minutes, since it can be "
+            "gigabytes."
+        ),
+    )
+    if enabled != settings.get("enabled", True):
+        # The toggle already triggered this run; persist and carry on rather
+        # than forcing a second full rerun of a heavy page.
+        state_mgr.save_autosave_settings({**settings, "enabled": enabled})
+
+    status = state_mgr.autosave_status()
+    if not status:
+        st.caption("No autosave yet.")
+        return
+
+    for name, (mtime, size) in sorted(status.items()):
+        label = "data + widgets" if name == AUTOSAVE_NAME else "widgets"
+        stamp = datetime.fromtimestamp(mtime).astimezone().strftime("%H:%M:%S")
+        st.caption(f"{label}: {stamp}, {size / 1024**2:.1f} MB")
+
+    if st.session_state.get("_autosave_resumed"):
+        st.caption("✅ This session was resumed from the autosave.")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("♻️ Restore", key="autosave_restore_btn"):
+            selected_plugins = state_mgr.restore_autosave(
+                data_mgr, widget_mgr
+            )
+            if selected_plugins is None:
+                st.error("❌ Failed to restore autosave")
+            else:
+                st.session_state["selected_plugins"] = selected_plugins
+                st.session_state["_autosave_resumed"] = True
+                st.rerun()
+    with col2:
+        if st.button("🗑️ Drop", key="autosave_drop_btn"):
+            state_mgr.clear_autosave()
+            st.rerun()
+
+
 def global_trigger_onclick():
     st.session_state["global_trigger"] = True
 
@@ -704,6 +828,10 @@ def main():
         logger.error(f"Manager initialization failed: {e}")
         st.error("Failed to initialize application components")
         return
+
+    # Before any widget is created: a restored selection is written into the
+    # multiselect's session-state key, which only counts ahead of the widget.
+    autoresume_state(state_mgr, data_mgr, widget_mgr)
 
     # Load plugins with error handling
     with st.spinner("🔌 Loading plugins..."):
@@ -785,6 +913,9 @@ def main():
                     except Exception as e:
                         logger.error(f"Delete error: {e}")
                         st.error("❌ Failed to delete snapshot")
+        with st.expander("♻️ Auto-resume", expanded=False):
+            autosave_ui(state_mgr, data_mgr, widget_mgr)
+
         # st.divider()
         global_trigger()
         # st.divider()
@@ -876,6 +1007,11 @@ def main():
         # Must run even when the script is interrupted: otherwise the trigger
         # stays latched and every later rerun regenerates everything.
         st.session_state["global_trigger"] = False
+
+    # Placed right after the chain rather than at the end of the script, so
+    # the state a long run produced is on disk before the debug console (or
+    # anything else below) gets a chance to fail or be interrupted.
+    autosave_state(state_mgr, data_mgr, widget_mgr)
     # Enhanced Debug Section
     with st.sidebar.expander("🔍 Debug Console"):
         st.subheader("📊 System Resources (Beta)")

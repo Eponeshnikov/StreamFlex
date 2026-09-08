@@ -1,5 +1,11 @@
 [server]
 maxUploadSize = 250
+# How long a session survives without a websocket. The frontend only remembers
+# its session id inside the live page, so this buys back a *dropped* connection
+# (paused laptop, flaky link) — not a reload, which always gets a new session
+# and is recovered from the autosave snapshot instead. A kept session holds the
+# whole data bus, so this is not free; streamlit's own default is 120 s.
+disconnectedSessionTTL = 1800
 
 [client]
 # Показывать пункты "Clear cache"/"Rerun" в меню даже при доступе не с localhost
