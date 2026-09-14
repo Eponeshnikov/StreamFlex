@@ -2189,8 +2189,11 @@ def _path_power_db(paths, time_index=None):
     """
     try:
         a = paths.a
-        if isinstance(a, (tuple, list)) and len(a) == 2:
-            arr = np.asarray(a[0].numpy()) + 1j * np.asarray(a[1].numpy())
+        if isinstance(a, (tuple, list)):
+            if len(a) != 2:
+                return None
+            real, imag = a
+            arr = np.asarray(real.numpy()) + 1j * np.asarray(imag.numpy())
         else:
             arr = np.asarray(a.numpy() if hasattr(a, "numpy") else a)
     except Exception:
@@ -2361,7 +2364,11 @@ def add_paths_to_figure(
         def _power_scale(rx_idx, tx_idx, path_idx):
             """Return opacity fraction and width level for one ray."""
             peak = power_limits.get((rx_idx, tx_idx))
-            if peak is None:
+            if power_db is None or peak is None:
+                # `power_limits` is only ever filled when the powers exist, so
+                # the peak lookup already covers this — but the closure reads
+                # `power_db` past the guard that built it, and a reader (or a
+                # type checker) has no way to know that from here.
                 return 1.0, None
             value = float(power_db[rx_idx, tx_idx, path_idx])
             if not np.isfinite(value):
@@ -3380,7 +3387,7 @@ def plan_axis_chunks(
     margin=0.65,
     max_bytes=None,
     min_chunk=1,
-):
+) -> dict[int, int]:
     """Greedy memory-aware chunk sizes for an N-dim tensor.
 
     Returns ``{axis: chunk_size}`` for every axis in ``splittable_axes`` such
