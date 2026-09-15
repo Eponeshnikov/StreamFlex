@@ -1958,6 +1958,20 @@ def scene_display_controls(
     return tuple(hidden or ()), bool(legend)
 
 
+#: Sionna's own path palette, exactly
+#: (sionna.rt.constants: LOS/SPECULAR/DIFFUSE/REFRACTION/DIFFRACTION_COLOR).
+#: Module level because the 3D scene view is not the only thing that colours
+#: an interaction type: the ray-analysis charts key off the same table, so a
+#: ray drawn light-blue in the scene is a light-blue bar there too.
+SIONNA_PATH_COLORS = {
+    "los": "rgb(128,128,128)",  # (0.5, 0.5, 0.5)
+    "specular": "rgb(153,153,255)",  # (0.6, 0.6, 1.0)
+    "diffuse": "rgb(153,255,153)",  # (0.6, 1.0, 0.6)
+    "refraction": "rgb(255,153,153)",  # (1.0, 0.6, 0.6)
+    "diffraction": "rgb(153,0,153)",  # (0.6, 0.0, 0.6)
+}
+
+
 def render_sionna_scene_plotly(
     scene,
     paths=None,
@@ -2012,15 +2026,7 @@ def render_sionna_scene_plotly(
     """
     fig = go.Figure()
 
-    # Match Sionna's own path palette exactly
-    # (sionna.rt.constants: LOS/SPECULAR/DIFFUSE/REFRACTION/DIFFRACTION_COLOR).
-    path_colors = {
-        "los": "rgb(128,128,128)",  # (0.5, 0.5, 0.5)
-        "specular": "rgb(153,153,255)",  # (0.6, 0.6, 1.0)
-        "diffuse": "rgb(153,255,153)",  # (0.6, 1.0, 0.6)
-        "refraction": "rgb(255,153,153)",  # (1.0, 0.6, 0.6)
-        "diffraction": "rgb(153,0,153)",  # (0.6, 0.0, 0.6)
-    }
+    path_colors = dict(SIONNA_PATH_COLORS)
     path_widths = {"los": 4}
 
     if show_objects:
