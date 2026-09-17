@@ -3318,6 +3318,123 @@ def submit_gpu_job(
     return result
 
 
+#: VRAM one solver child holds once it has a scene and has solved once:
+#: 1794 MiB measured on LOD3 Kazan (the CUDA context is 420 MiB of that,
+#: and none of it ever comes back inside a live process). Used to cap how
+#: many of them may run at once.
+GPU_WORKER_VRAM_BYTES = 1800 * 1024**2
+
+
+@st.cache_resource(show_spinner=False)
+def _gpu_pool_store():
+    """Dedicated single-worker executors, by group.
+
+    Not `get_reusable_executor(max_workers=N)`: that is loky's *singleton*,
+    shared with the heavy plugins, and resizing it shuts the pool down —
+    including the child that is holding a scene warm. It also hands a task
+    to whichever worker is free, and this needs the opposite: a frame must
+    land on the same process every time, or every worker loads its own copy
+    of the city and the card fills with duplicates. One single-worker
+    executor per slot gives that affinity for nothing.
+    """
+    return {"pools": {}, "lock": threading.Lock()}
+
+
+def gpu_worker_slots(group, size, *, vram_margin=0.7):
+    """How many solver children this group may actually run in parallel.
+
+    Capped by free device memory rather than by core count: the work is
+    host-side and single-threaded (a path solve leaves the GPU at ~0% while
+    one core rebuilds the megakernel), so more processes really is more
+    throughput — right up to the point where the next scene does not fit
+    and the driver starts thrashing.
+    """
+    size = max(1, int(size))
+    try:
+        free = int(free_memory_bytes("cuda"))
+    except Exception:
+        return size
+    if free <= 0:
+        return size
+    allowed = int(free * float(vram_margin) // GPU_WORKER_VRAM_BYTES)
+    return max(1, min(size, allowed))
+
+
+def submit_gpu_batch(group, jobs, *, size, on_result=None, on_wait=None):
+    """Run several solver jobs across a group's own children, in parallel.
+
+    ``jobs`` is a sequence of ``(fn, args, kwargs)``. Results come back in
+    the order given, and ``on_result(index, elapsed)`` is called as each one
+    lands so the caller can report progress — out of order, because that is
+    the order they finish in. ``on_wait()`` is called about every 0.4 s
+    while anything is still running, which is how a caller draws a bar for
+    work that reports from inside the children rather than by finishing:
+    one job here can be a quarter of a run.
+
+    The children are kept between calls exactly as ``submit_gpu_job``'s warm
+    worker is: each one loads the scene once and answers every later job
+    from it. ``release_gpu_worker(group)`` ends them.
+    """
+    import time as _time
+    from concurrent.futures import as_completed
+
+    from joblib.externals.loky import ProcessPoolExecutor
+
+    jobs = list(jobs)
+    if not jobs:
+        return []
+    size = max(1, min(int(size), len(jobs)))
+    # `size` is how many run at once; `jobs` may be many more than that.
+    store = _gpu_pool_store()
+    with store["lock"]:
+        pools = store["pools"].setdefault(group, [])
+        while len(pools) < size:
+            # An explicit idle timeout, because loky's default reaps a
+            # worker between frames and the next one then reloads the
+            # city. These die when the view is switched off, which is
+            # `release_gpu_worker`'s job and the only thing that returns
+            # their VRAM anyway.
+            pools.append(ProcessPoolExecutor(max_workers=1, timeout=1800))
+        pools = pools[:size]
+
+    from concurrent.futures import FIRST_COMPLETED, wait
+
+    # Handed out one at a time, not dealt round-robin up front. Jobs here
+    # are not equal: a window of a walk costs what its receivers cost, and
+    # a blocked point is cheap where a point with rich multipath is not.
+    # Dealt in advance, the run ends with one worker still grinding
+    # through its share while the rest sit idle -- the load falls off and
+    # so does the rate. A worker that finishes takes the next window
+    # instead, and keeps the scene it already has.
+    queue = list(enumerate(jobs))
+    results = [None] * len(jobs)
+    started = _time.time()
+    inflight = {}
+
+    def _feed(pool_index):
+        if not queue:
+            return
+        index, (fn, args, kwargs) = queue.pop(0)
+        future = pools[pool_index].submit(fn, *args, **dict(kwargs or {}))
+        inflight[future] = (index, pool_index)
+
+    for slot in range(len(pools)):
+        _feed(slot)
+    while inflight:
+        landed, _ = wait(
+            set(inflight), timeout=0.4, return_when=FIRST_COMPLETED
+        )
+        for future in landed:
+            index, pool_index = inflight.pop(future)
+            results[index] = future.result()
+            if on_result is not None:
+                on_result(index, _time.time() - started)
+            _feed(pool_index)
+        if on_wait is not None and inflight:
+            on_wait()
+    return results
+
+
 def release_gpu_worker(warm_group):
     """Drop a keep-warm claim and kill the worker once none are left.
 
@@ -3335,7 +3452,14 @@ def release_gpu_worker(warm_group):
         # would hand back results for a scene that no longer exists.
         for cached in [k for k in store["done"] if _in_group(k, warm_group)]:
             del store["done"][cached]
-    return _reclaim_idle_gpu_worker(store)
+    pool_store = _gpu_pool_store()
+    with pool_store["lock"]:
+        pools = pool_store["pools"].pop(warm_group, [])
+    for pool in pools:
+        # Each of these holds a scene of its own, which is the whole reason
+        # they exist and the whole reason they must not outlive the view.
+        pool.shutdown(wait=False, kill_workers=True)
+    return _reclaim_idle_gpu_worker(store) or bool(pools)
 
 
 def _in_group(key, warm_group):
