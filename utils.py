@@ -3376,7 +3376,6 @@ def submit_gpu_batch(group, jobs, *, size, on_result=None, on_wait=None):
     from it. ``release_gpu_worker(group)`` ends them.
     """
     import time as _time
-    from concurrent.futures import as_completed
 
     from joblib.externals.loky import ProcessPoolExecutor
 
@@ -3407,7 +3406,7 @@ def submit_gpu_batch(group, jobs, *, size, on_result=None, on_wait=None):
     # so does the rate. A worker that finishes takes the next window
     # instead, and keeps the scene it already has.
     queue = list(enumerate(jobs))
-    results = [None] * len(jobs)
+    results: list[Any] = [None] * len(jobs)
     started = _time.time()
     inflight = {}
 
