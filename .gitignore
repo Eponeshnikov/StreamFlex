@@ -192,3 +192,8 @@ test*
 !tests/
 tests/*
 tests/test_offline_keygen.py
+
+# Локальные заметки и черновики спецификаций рядом с уже игнорируемым
+# other_docs/ — не часть программы.
+/docs/
+CLAUDE.md
