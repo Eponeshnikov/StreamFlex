@@ -4,11 +4,32 @@ import streamlit as st
 import yaml  # Required to parse the config file
 
 from session_guard import install_session_guards
+from utils import (
+    configure_joblib_temp_folder,
+    logger,
+    sweep_orphaned_joblib_folders,
+)
 
 # Every page runs through this entry script, so this is the one place that
 # covers the offline pages too: without it a closed tab aborts a peaks-
 # processing or training run exactly the way it aborts a plugin chain.
 install_session_guards()
+
+# ...and the same reason puts these two here. joblib hands its workers'
+# array arguments over through a spill folder, and left to itself it picks
+# /dev/shm — tmpfs, i.e. RAM that belongs to no process: it is in neither
+# the app's RSS nor the cgroup's usage, and it outlives whatever made it.
+# A run killed for using too much memory therefore leaves its spill behind
+# for the *next* run to start against (measured: 50 GiB from two processes
+# that had already died). So the folder is moved onto a disk, and start-up
+# is the only moment after such a death when anything can sweep up.
+_joblib_folder = configure_joblib_temp_folder()
+_swept, _swept_bytes = sweep_orphaned_joblib_folders()
+if _swept:
+    logger.info(
+        f"Reclaimed {_swept_bytes / 1024**3:.1f} GiB from {_swept} joblib "
+        f"spill folder(s) left behind by processes that are gone."
+    )
 
 
 # --- Helper Function for Formatting Titles ---
