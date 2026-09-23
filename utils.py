@@ -3469,7 +3469,12 @@ def spill_min_array_bytes():
 
 
 def spill_payload_arrays(
-    obj, directory, *, min_bytes=None, mmap_mode="c", _counter=None
+    obj,
+    directory,
+    *,
+    min_bytes=None,
+    mmap_mode: Literal["r+", "r", "w+", "c"] | None = "c",
+    _counter=None,
 ):
     """Move an in-memory payload's big arrays to disk, read back as memmaps.
 
