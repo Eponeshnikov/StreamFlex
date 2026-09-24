@@ -201,7 +201,15 @@ class Plugin:
             widget_manager.save_widget_state(
                 self.get_name(), widget_name, serialized_value
             )
-            if local_rerun_scope == "app":
+            # An ``on_change="ignore"`` widget reaches Python only on a rerun
+            # something else started -- very often a button click. Rerunning
+            # again here would drop that click (a button is True for one run
+            # only), and nothing on screen depends on such a widget, which is
+            # the reason it was made to ignore changes in the first place.
+            if (
+                local_rerun_scope == "app"
+                and kwargs.get("on_change") != "ignore"
+            ):
                 st.rerun(scope=local_rerun_scope)
 
         return widget_value

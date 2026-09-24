@@ -507,7 +507,20 @@ def render_custom_plotly_chart(
             "The 'key' parameter is required to ensure unique widget IDs. "
             "Please provide a unique string for each chart you render."
         )
+    _custom_plotly_chart_fragment(fig, width, key)
 
+
+@st.fragment
+def _custom_plotly_chart_fragment(
+    fig: go.Figure, width: Width, key: str
+) -> None:
+    """The body of :func:`render_custom_plotly_chart`, as a fragment.
+
+    Every control in here (the styling toggle, the options popover) only
+    restyles this one chart, so it reruns only this chart instead of the
+    page or plugin around it -- which, on the analysis pages, means
+    re-rendering every other figure as well.
+    """
     # --- Main toggle to switch between standard and custom modes ---
     custom_mode_key = f"{key}_enable_custom_mode"
     if custom_mode_key not in st.session_state:
@@ -524,16 +537,17 @@ def render_custom_plotly_chart(
     )
 
     # with save_col:
-    # Serialize the figure to bytes for download
-    fig_bytes = pickle.dumps(fig)
+    # Pickled on click, not on every rerun: a scene or animation figure runs
+    # to tens of megabytes, and a download needs no rerun at all.
     st.download_button(
         label="💾 Save Fig",
-        data=fig_bytes,
+        data=lambda: pickle.dumps(fig),
         file_name=f"{key}_figure.pickle",
         mime="application/octet-stream",
         key=f"{key}_save_pickle_btn",
         help="Save the current figure as a pickle file",
         width="stretch",
+        on_click="ignore",
     )
 
     # --- RENDER LOGIC ---
@@ -1006,6 +1020,46 @@ def generate_cache_filename(cache_dir, func, *args, **kwargs):
     hash_object = hashlib.sha256(serialized_data)
     filename = f"{func.__name__}^" + hash_object.hexdigest() + ".pickle"
     return os.path.join(cache_dir, filename)
+
+
+def parquet_signature(path: str) -> tuple:
+    """Sizes and mtimes of a parquet file, or of a folder of part files.
+
+    A cheap cache key that changes when the data does: a rebuilt dataset or
+    a re-saved run keys differently without anyone clearing a cache.
+    """
+    if os.path.isdir(path):
+        entries = sorted(
+            os.path.join(path, name)
+            for name in os.listdir(path)
+            if name.endswith(".parquet")
+        )
+    else:
+        entries = [path]
+    return tuple(
+        (entry, os.stat(entry).st_size, os.stat(entry).st_mtime_ns)
+        for entry in entries
+    )
+
+
+@st.cache_resource(max_entries=2, ttl="30m", show_spinner="Reading parquet…")
+def _read_parquet_cached(path: str, signature: tuple):
+    del signature  # only part of the cache key
+    import polars as pl
+
+    return pl.read_parquet(path)
+
+
+def read_parquet_cached(path: str):
+    """``pl.read_parquet(path)``, read once per file version, not per rerun.
+
+    For pages that load a whole table and then slice it by widgets: every
+    interaction used to re-read the file, which for a ResultsSaver run is
+    gigabytes. ``cache_resource`` returns the same frame without a copy
+    (polars frames are immutable), keyed on :func:`parquet_signature`; the
+    TTL lets an idle page give the memory back.
+    """
+    return _read_parquet_cached(path, parquet_signature(path))
 
 
 def cache_result(reset=False, cache_dir=None):
