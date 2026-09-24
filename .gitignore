@@ -197,3 +197,7 @@ tests/test_offline_keygen.py
 # other_docs/ — не часть программы.
 /docs/
 CLAUDE.md
+.claude
+.agents
+.codex
+.kilo
