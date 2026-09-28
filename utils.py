@@ -2910,6 +2910,61 @@ AXIS_METADATA_VERSION = 1
 CIR_AXIS_NAMES = ["batch", "rx", "rx_ant", "tx", "tx_ant", "path", "time"]
 
 
+# ---- The eavesdropper as a pipeline participant -------------------------
+#
+# A CIR-Generator config given an Eve positions JSON (Position Selector,
+# *Eavesdropper (Eve) walk*) emits a twin of every combination with her RX
+# list in place of Bob's. Both twins carry ``party`` and ``party_pair`` in
+# their parameters; every later stage treats Eve's twin exactly like Bob's
+# except for the random realisations that belong to a *receiver* -- her
+# thermal noise and her front-end impairments are hers, not a copy of his.
+# With the same seed her AWGN would be his sample for sample, and on a walk
+# near his that reads as an eavesdropper far better than any real one.
+
+PARTY_BOB = "bob"
+PARTY_EVE = "eve"
+
+
+def cir_party(item) -> str:
+    """``"eve"`` for an item descended from an Eve twin, else ``"bob"``.
+
+    Walks ``source_info`` to the CIR-Generator's parameters, so it works on
+    a CIR item and on anything downstream of one.
+    """
+
+    def _find(node):
+        if not isinstance(node, dict):
+            return None
+        info = node.get("config_info", node)
+        if not isinstance(info, dict):
+            return None
+        if info.get("plugin_key") == "cir_generator":
+            return (info.get("parameters") or {}).get("party")
+        sources = info.get("source_info") or []
+        if isinstance(sources, dict):
+            sources = [sources]
+        for source in sources:
+            found = _find(source)
+            if found is not None:
+                return found
+        return None
+
+    return PARTY_EVE if _find(item) == PARTY_EVE else PARTY_BOB
+
+
+def party_seed(seed, party: str):
+    """The seed a receiver's random realisation uses for ``party``.
+
+    Bob keeps the configured seed unchanged, so runs without an Eve are
+    bit-identical to before. Eve's is derived from it -- reproducible, and
+    independent of Bob's stream.
+    """
+    if party != PARTY_EVE or seed is None:
+        return seed
+    state = np.random.SeedSequence([int(seed), 0x45564531]).generate_state(1)
+    return int(state[0] & 0x7FFFFFFF)
+
+
 def build_axis_metadata(
     *,
     batch_size,

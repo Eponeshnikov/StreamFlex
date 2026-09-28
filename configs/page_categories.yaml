@@ -11,6 +11,8 @@
 # must NOT show up as navigation entries.
 exclude:
   - "component_visibility.py"
+  - "dynamic_scenario.py"
+  - "eve_trajectory.py"
   - "filter_specs.py"
   - "first_component_eval.py"
   - "first_component_worker.py"
