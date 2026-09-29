@@ -10,7 +10,9 @@
 # Files under pages/ that are import-only modules (shared config/helpers) and
 # must NOT show up as navigation entries.
 exclude:
+  - "cir_correlation_trajectory.py"
   - "component_visibility.py"
+  - "delta_tau_correlation.py"
   - "dynamic_scenario.py"
   - "eve_trajectory.py"
   - "filter_specs.py"
