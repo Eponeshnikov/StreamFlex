@@ -10,3 +10,10 @@ disconnectedSessionTTL = 1800
 [client]
 # Показывать пункты "Clear cache"/"Rerun" в меню даже при доступе не с localhost
 toolbarMode = "developer"
+
+[runner]
+# Streamlit's gc.collect(2) after every run walks the whole heap (≈11 GB with
+# keygen data) under the GIL; the 0.75 s polling fragment of a background
+# figure then starves the build thread for minutes. Refcounting + Python's own
+# generational GC still free memory.
+postScriptGC = false
