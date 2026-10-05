@@ -507,6 +507,9 @@ def render_custom_plotly_chart(
             "The 'key' parameter is required to ensure unique widget IDs. "
             "Please provide a unique string for each chart you render."
         )
+    if getattr(fig, "frames", None):  # animations go to the fast step player
+        plotly_chart(fig, key=key)
+        return
     _custom_plotly_chart_fragment(fig, width, key)
 
 
@@ -2779,6 +2782,29 @@ def visualization_time_control(
         )
     )
     return start + local_index, None
+
+
+def plotly_chart(fig, *, key=None, height=None, **kwargs):
+    """``st.plotly_chart``, except a figure with ``frames`` is shown by the
+    fast step player (:mod:`fast_player`): the same frames packed once,
+    redrawn one at a time with ``Plotly.react`` — long animations no longer
+    ship every frame as JSON or hang the browser. Follows the Streamlit theme."""
+    if not getattr(fig, "frames", None):
+        return st.plotly_chart(fig, key=key, **kwargs)
+    import streamlit.components.v1 as components
+
+    import fast_player
+
+    plot_h = int(height or fig.layout.height or 600)
+    html = fast_player.from_figure(fig, key=str(key or "fastplayer"), height=plot_h)
+    return components.html(html, height=plot_h + 60, scrolling=False)
+
+
+def plotly_animation_html(fig, *, key="fastplayer") -> str:
+    """Standalone HTML of an animated figure for download (fast player)."""
+    import fast_player
+
+    return fast_player.from_figure(fig, standalone=True, key=key)
 
 
 def add_plotly_frame_slider(
