@@ -122,7 +122,12 @@ def render(base_fig: go.Figure, animated: Sequence[int] | None,
     base = json.loads(base_fig.to_json())
     layout = base["layout"]
     layout.pop("sliders", None)
-    layout.pop("updatemenus", None)
+    # Plotly's own play / step menus go (the player has its own); any other
+    # menu — e.g. a restyle toggle — stays.
+    menus = [m for m in layout.pop("updatemenus", None) or []
+             if not any(b.get("method") == "animate" for b in m.get("buttons", []))]
+    if menus:
+        layout["updatemenus"] = menus
     layout["template"] = None
     layout["uirevision"] = "keep"  # zoom / 3D camera survive the redraws
     if height:
