@@ -580,13 +580,19 @@ def _trace_session_events():
         starlette_websocket as _ws_module,
     )
 
-    _ws_module.WEBSOCKET_MAX_SEND_QUEUE_SIZE = 20000  # type: ignore[attr-defined]
+    send_queue_size = 20000
+    _ws_module.WEBSOCKET_MAX_SEND_QUEUE_SIZE = send_queue_size  # type: ignore[attr-defined]
 
     original_write = _ws_module.StarletteSessionClient.write_forward_msg
 
     def write_forward_msg(self, msg):
         queue = getattr(self, "_send_queue", None)
         if queue is not None:
+            # A client that connected before this module first ran (e.g. the
+            # tab that reconnects after a server restart) got its queue
+            # sized from the old constant; widen it in place.
+            if 0 < queue.maxsize < send_queue_size:
+                queue._maxsize = send_queue_size
             depth = queue.qsize()
             if depth and depth % 250 == 0:
                 logger.bind(class_name="streamlit").warning(
