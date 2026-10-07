@@ -33,10 +33,67 @@ render of the page — the queue coalesces deltas by delta path and is cleared
 at the start of every script run — not by how long the run lasts.
 """
 
+import threading
+
 from loguru import logger
 
 _INSTALLED_ATTR = "_streamflex_session_guard"
 _KEEP_RUNNING_ATTR = "_streamflex_keep_running"
+
+#: Detached sessions whose script was still running when the session storage
+#: let go of them, kept alive here until the script ends.
+_PARKED: dict[int, object] = {}
+_PARKED_LOCK = threading.Lock()
+_PARK_POLL_S = 30.0
+_watcher: threading.Thread | None = None
+
+
+def _is_running(session) -> bool:
+    from streamlit.runtime.app_session import AppSessionState
+
+    return getattr(session, "_state", None) == AppSessionState.APP_IS_RUNNING
+
+
+def _release_finished_sessions() -> int:
+    """Shut down parked sessions whose script has ended; return how many."""
+    with _PARKED_LOCK:
+        done = [(k, s) for k, s in _PARKED.items() if not _is_running(s)]
+        for key, _ in done:
+            del _PARKED[key]
+    for _, session in done:
+        try:
+            # __del__ already ran once (PEP 442: never again), so the
+            # shutdown it skipped is done here explicitly.
+            session.shutdown()
+        except Exception as exc:  # a finished run must not take the app down
+            logger.bind(class_name="streamlit").warning(
+                "parked session {} shutdown failed: {}",
+                getattr(session, "id", "?"),
+                exc,
+            )
+        else:
+            logger.bind(class_name="streamlit").info(
+                "parked session {} finished its script and was shut down",
+                getattr(session, "id", "?"),
+            )
+    return len(done)
+
+
+def _watch_parked() -> None:
+    import time
+
+    while True:
+        time.sleep(_PARK_POLL_S)
+        _release_finished_sessions()
+
+
+def _ensure_watcher() -> None:
+    global _watcher
+    if _watcher is None or not _watcher.is_alive():
+        _watcher = threading.Thread(
+            target=_watch_parked, name="streamflex-parked-sessions", daemon=True
+        )
+        _watcher.start()
 
 
 def install_session_guards() -> None:
@@ -91,6 +148,31 @@ def install_session_guards() -> None:
                 setattr(session, _KEEP_RUNNING_ATTR, False)
 
     WebsocketSessionManager.disconnect_session = disconnect_session
+
+    # The disconnect is only the first way a detached run dies. The session
+    # then sits in the session storage for `disconnectedSessionTTL`; once
+    # that has passed, the next storage write (any other tab disconnecting)
+    # evicts it, the last reference goes, and `AppSession.__del__` calls
+    # `shutdown()` -- which stops the script. A three-hour training whose
+    # tab was closed died the moment the page was opened and closed again an
+    # hour later. A running session is parked instead and shut down by the
+    # watcher once its script has finished.
+    original_del = AppSession.__del__
+
+    def __del__(self):
+        if _is_running(self):
+            with _PARKED_LOCK:
+                _PARKED[id(self)] = self
+            _ensure_watcher()
+            logger.bind(class_name="streamlit").warning(
+                "session {} expired from storage mid-run: parked until its "
+                "script finishes",
+                getattr(self, "id", "?"),
+            )
+            return
+        original_del(self)
+
+    AppSession.__del__ = __del__
     setattr(WebsocketSessionManager, _INSTALLED_ATTR, True)
 
     logger.bind(class_name="streamlit").info(
