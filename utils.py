@@ -3188,7 +3188,8 @@ def free_memory_bytes(device="cpu"):
 
 
 def _cgroup_v2_available_bytes(
-    cgroup_root="/sys/fs/cgroup", proc_cgroup="/proc/self/cgroup"
+    cgroup_root: str | os.PathLike[str] = "/sys/fs/cgroup",
+    proc_cgroup: str | os.PathLike[str] = "/proc/self/cgroup",
 ):
     """Return the remaining memory in this process' cgroup v2 hierarchy.
 
@@ -3603,14 +3604,36 @@ def spill_min_array_bytes():
     return SPILL_MIN_ARRAY_BYTES
 
 
-def spill_payload_arrays(
-    obj,
-    directory,
+@overload
+def spill_payload_arrays[DictPayload: dict[Any, Any]](
+    obj: DictPayload,
+    directory: str | os.PathLike[str],
     *,
-    min_bytes=None,
+    min_bytes: int | None = None,
     mmap_mode: Literal["r+", "r", "w+", "c"] | None = "c",
-    _counter=None,
-):
+    _counter: list[int] | None = None,
+) -> tuple[DictPayload, int]: ...
+
+
+@overload
+def spill_payload_arrays(
+    obj: object,
+    directory: str | os.PathLike[str],
+    *,
+    min_bytes: int | None = None,
+    mmap_mode: Literal["r+", "r", "w+", "c"] | None = "c",
+    _counter: list[int] | None = None,
+) -> tuple[Any, int]: ...
+
+
+def spill_payload_arrays(
+    obj: object,
+    directory: str | os.PathLike[str],
+    *,
+    min_bytes: int | None = None,
+    mmap_mode: Literal["r+", "r", "w+", "c"] | None = "c",
+    _counter: list[int] | None = None,
+) -> tuple[Any, int]:
     """Move an in-memory payload's big arrays to disk, read back as memmaps.
 
     The bus between plugins keeps every stage's payload alive at once, and

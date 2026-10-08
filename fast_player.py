@@ -27,7 +27,7 @@ import base64
 import json
 import zlib
 from collections.abc import Iterable, Sequence
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import plotly.graph_objects as go
@@ -119,7 +119,7 @@ def render(base_fig: go.Figure, animated: Sequence[int] | None,
             patch = {"title": {"text": patch}}
         packed.append({"d": [packer.value(d) for d in data], "l": packer.value(patch or {}),
                        "t": None if traces is None else [int(t) for t in traces]})
-    base = json.loads(base_fig.to_json())
+    base = json.loads(cast(str, base_fig.to_json()))
     layout = base["layout"]
     layout.pop("sliders", None)
     # Plotly's own play / step menus go (the player has its own); any other

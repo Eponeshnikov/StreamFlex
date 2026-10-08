@@ -44,7 +44,6 @@ dev = [
     "narwhals<1.48",
     "openpyxl>=3.1.5",
     "pandarallel>=1.6.5",
-    "polars-complex",
     "prettytable>=3.16.0",
     "pyqt6>=6.9.1",
     "pyside6>=6.9.1",
@@ -104,8 +103,6 @@ signal-channelizer = [
 ]
 
 [tool.uv.sources]
-polars-complex = { git = "https://github.com/monochromatti/polars-complex.git" }
-
 torch = [
     { index = "pytorch-cu130", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]

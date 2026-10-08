@@ -34,15 +34,19 @@ at the start of every script run — not by how long the run lasts.
 """
 
 import threading
+from typing import TYPE_CHECKING
 
 from loguru import logger
+
+if TYPE_CHECKING:
+    from streamlit.runtime.app_session import AppSession
 
 _INSTALLED_ATTR = "_streamflex_session_guard"
 _KEEP_RUNNING_ATTR = "_streamflex_keep_running"
 
 #: Detached sessions whose script was still running when the session storage
 #: let go of them, kept alive here until the script ends.
-_PARKED: dict[int, object] = {}
+_PARKED: dict[int, "AppSession"] = {}
 _PARKED_LOCK = threading.Lock()
 _PARK_POLL_S = 30.0
 _watcher: threading.Thread | None = None
