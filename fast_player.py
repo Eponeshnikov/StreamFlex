@@ -53,7 +53,9 @@ class _Packer:
             return {"$b": ["u8", self._put(a.astype(np.uint8).tobytes()), int(a.size)]}
         f = a.astype(np.float32)
         finite = f[np.isfinite(f)]
-        if finite.size == 0 or np.abs(finite).max() <= 1.0001:
+        # int8 only for ρ-like data that actually spans ~[−1, 1]; tiny-scale
+        # data (delays ~1e-7 s, path gains ~1e-6) would quantise to 0.
+        if finite.size == 0 or 0.25 <= np.abs(finite).max() <= 1.0001:
             q = np.where(np.isfinite(f), np.clip(np.round(f * 127), -127, 127), -128)
             return {"$b": ["q8", self._put(q.astype(np.int8).tobytes()), int(a.size)]}
         pad = (-self.size) % 4  # Float32Array needs 4-byte alignment
@@ -84,7 +86,8 @@ class _Packer:
 def _plain(v: Any) -> Any:
     if isinstance(v, (np.floating, float)):
         f = float(v)
-        return None if not np.isfinite(f) else round(f, 5)
+        # Significant digits, not decimals: round(1e-7, 5) == 0.
+        return None if not np.isfinite(f) else float(f"{f:.6g}")
     if isinstance(v, np.integer):
         return int(v)
     if isinstance(v, list):
