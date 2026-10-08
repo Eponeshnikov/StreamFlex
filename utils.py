@@ -1686,9 +1686,41 @@ def load_scene_cached(scene_path: str, merge_shapes: bool = True):
     waits for it -- note this only ever helps an entry that already
     exists; the first load of a scene is still synchronous.
     """
+    return load_scene_file(scene_path, merge_shapes=merge_shapes)
+
+
+_SCENE_LOAD_LOCK = threading.Lock()
+
+
+def load_scene_file(scene_path: str, merge_shapes: bool = True):
+    """``sionna.rt.load_scene`` that resolves a scene's relative mesh paths
+    on any thread.
+
+    OSM-built scenes reference ``meshes/<shape>.ply`` relative to the XML.
+    Mitsuba resolves them through the *calling thread's* file resolver, and
+    the background cache refresh runs on a pool thread: there it failed with
+    "PLY file ... not found" while the same scene loaded fine on the script
+    thread. The scene's directory is put in front of a private copy of the
+    resolver for the duration of the load, and loads are serialized so two
+    of them never share one resolver half-way through.
+    """
+    import mitsuba as mi
     from sionna.rt import load_scene
 
-    return load_scene(scene_path, merge_shapes=merge_shapes)
+    scene_dir = os.path.dirname(os.path.abspath(scene_path))
+    with _SCENE_LOAD_LOCK:
+        thread = mi.Thread.thread()
+        old = thread.file_resolver()
+        resolver = mi.FileResolver()
+        resolver.clear()
+        resolver.append(scene_dir)
+        for entry in old:
+            resolver.append(str(entry))
+        thread.set_file_resolver(resolver)
+        try:
+            return load_scene(scene_path, merge_shapes=merge_shapes)
+        finally:
+            thread.set_file_resolver(old)
 
 
 # Coarse mesh categories, by the naming the OSM scene builder writes
@@ -2791,13 +2823,11 @@ def plotly_chart(fig, *, key=None, height=None, **kwargs):
     ship every frame as JSON or hang the browser. Follows the Streamlit theme."""
     if not getattr(fig, "frames", None):
         return st.plotly_chart(fig, key=key, **kwargs)
-    import streamlit.components.v1 as components
-
     import fast_player
 
     plot_h = int(height or fig.layout.height or 600)
     html = fast_player.from_figure(fig, key=str(key or "fastplayer"), height=plot_h)
-    return components.html(html, height=plot_h + 60, scrolling=False)
+    return st.iframe(html, height=plot_h + 60)
 
 
 def plotly_animation_html(fig, *, key="fastplayer") -> str:
@@ -2989,6 +3019,50 @@ def party_seed(seed, party: str):
         return seed
     state = np.random.SeedSequence([int(seed), 0x45564531]).generate_state(1)
     return int(state[0] & 0x7FFFFFFF)
+
+
+def spread_sample_indices(points, k, rng=None, existing=None):
+    """Pick ``k`` indices of ``points`` spread over the map, k-means++ style.
+
+    Each next point is drawn with probability proportional to the squared
+    distance to the nearest already chosen one (D² seeding), so picks
+    cover the area instead of clustering the way a uniform draw does,
+    while staying random. ``existing`` -- coordinates already selected --
+    count as chosen, so a second press fills the gaps. ``rng`` is a
+    ``random.Random`` (or anything with ``random()``/``randrange()``).
+    """
+    import random as _random
+
+    rng = rng if rng is not None else _random.Random()
+    pts = np.asarray(points, dtype=float).reshape(len(points), -1)
+    n = len(pts)
+    k = max(0, min(int(k), n))
+    if k == 0:
+        return []
+    d2 = np.full(n, np.inf)
+    if existing is not None and len(existing):
+        ex = np.asarray(existing, dtype=float).reshape(len(existing), -1)
+        dim = min(ex.shape[1], pts.shape[1])
+        for e in ex[:, :dim]:
+            d2 = np.minimum(d2, ((pts[:, :dim] - e) ** 2).sum(axis=1))
+    chosen: list[int] = []
+    for _ in range(k):
+        w = d2.copy()
+        w[chosen] = 0.0
+        if np.isinf(w).any():
+            # Nothing chosen yet: uniform over the remaining points.
+            pool = [i for i in range(n) if i not in chosen]
+            idx = pool[rng.randrange(len(pool))]
+        elif w.sum() <= 0:
+            pool = [i for i in range(n) if i not in chosen]
+            idx = pool[rng.randrange(len(pool))]
+        else:
+            c = np.cumsum(w)
+            idx = int(np.searchsorted(c, rng.random() * c[-1], side="right"))
+            idx = min(idx, n - 1)
+        chosen.append(idx)
+        d2 = np.minimum(d2, ((pts - pts[idx]) ** 2).sum(axis=1))
+    return chosen
 
 
 def build_axis_metadata(
