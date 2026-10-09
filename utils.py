@@ -3093,19 +3093,28 @@ def build_axis_metadata(
             count = int(seg.get("n_points", 0))
         except (TypeError, ValueError):
             continue
-        time_segments.append(
-            {
-                "trajectory_id": i,
-                "tx_index": seg.get("tx_index"),
-                "start": start,
-                "count": count,
-                "dt": seg.get("dt"),
-                "seed": seg.get("seed"),
-                "mode": seg.get("mode"),
-                "v_min": seg.get("v_min"),
-                "v_max": seg.get("v_max"),
-            }
-        )
+        entry = {
+            "trajectory_id": i,
+            "tx_index": seg.get("tx_index"),
+            "start": start,
+            "count": count,
+            "dt": seg.get("dt"),
+            "seed": seg.get("seed"),
+            "mode": seg.get("mode"),
+            "v_min": seg.get("v_min"),
+            "v_max": seg.get("v_max"),
+        }
+        # A leg of a multi-tower walk: which walk, which leg, and where it
+        # sits on that walk's clock -- what lets an analysis stitch the
+        # legs back together or keep them apart. Only on such segments, so
+        # every other run's metadata (and parquet schema) stays as it was.
+        handover = seg.get("handover")
+        if isinstance(handover, dict) and handover.get("walk_id") is not None:
+            entry["time_start_index"] = int(seg.get("time_start_index") or 0)
+            entry["handover_walk_id"] = str(handover["walk_id"])
+            entry["handover_leg"] = int(handover.get("leg", 0))
+            entry["handover_n_legs"] = int(handover.get("n_legs", 0))
+        time_segments.append(entry)
     meta = {
         "version": AXIS_METADATA_VERSION,
         "axes": list(axes) if axes else list(CIR_AXIS_NAMES),
