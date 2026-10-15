@@ -3327,6 +3327,96 @@ def available_memory_bytes():
     return host_available
 
 
+def _cgroup_v2_dirs(
+    cgroup_root: str | os.PathLike[str] = "/sys/fs/cgroup",
+    proc_cgroup: str | os.PathLike[str] = "/proc/self/cgroup",
+):
+    """This process' cgroup v2 directory and its parents, innermost first."""
+    try:
+        with open(proc_cgroup, encoding="utf-8") as fh:
+            rel = next(
+                line.rstrip("\n").split("::", 1)[1]
+                for line in fh
+                if "::" in line
+            )
+    except (OSError, StopIteration):
+        return []
+    current = os.path.normpath(os.path.join(cgroup_root, rel.lstrip("/")))
+    root = os.path.normpath(cgroup_root)
+    dirs = []
+    while current == root or current.startswith(root + os.sep):
+        dirs.append(current)
+        if current == root:
+            break
+        current = os.path.dirname(current)
+    return dirs
+
+
+def solver_memory_headroom(
+    cgroup_root: str | os.PathLike[str] = "/sys/fs/cgroup",
+    proc_cgroup: str | os.PathLike[str] = "/proc/self/cgroup",
+):
+    """``(headroom, limit)`` in bytes before the OOM killer acts.
+
+    Unlike :func:`available_memory_bytes`, a cgroup's inactive page cache
+    is not counted as used: the kernel drops it before it kills anything,
+    and a run that has written gigabytes of parquet sits at ``memory.max``
+    on cache alone. ``limit`` is the binding total, for a relative margin.
+    """
+    try:
+        import psutil
+
+        vm = psutil.virtual_memory()
+        headroom, limit = int(vm.available), int(vm.total)
+    except Exception:
+        return None, None
+    for directory in _cgroup_v2_dirs(cgroup_root, proc_cgroup):
+        try:
+            with open(os.path.join(directory, "memory.max"), encoding="utf-8") as fh:
+                limit_text = fh.read().strip()
+            if limit_text == "max":
+                continue
+            with open(
+                os.path.join(directory, "memory.current"), encoding="utf-8"
+            ) as fh:
+                used = int(fh.read().strip())
+            inactive_file = 0
+            with open(os.path.join(directory, "memory.stat"), encoding="utf-8") as fh:
+                for line in fh:
+                    if line.startswith("inactive_file "):
+                        inactive_file = int(line.split()[1])
+                        break
+        except (OSError, ValueError):
+            continue
+        room = max(0, int(limit_text) - (used - inactive_file))
+        if room < headroom:
+            headroom, limit = room, int(limit_text)
+    return headroom, limit
+
+
+def cgroup_oom_kills(
+    cgroup_root: str | os.PathLike[str] = "/sys/fs/cgroup",
+    proc_cgroup: str | os.PathLike[str] = "/proc/self/cgroup",
+):
+    """OOM kills so far in this process' cgroup (``memory.events``), or 0.
+
+    The scope ``run_streamlit.sh`` starts is where a solver child dies when
+    the run outgrows ``MemoryMax``; the counter going up between two reads
+    is how a dead child is told apart from one that crashed on its own.
+    """
+    dirs = _cgroup_v2_dirs(cgroup_root, proc_cgroup)
+    if not dirs:
+        return 0
+    try:
+        with open(os.path.join(dirs[0], "memory.events"), encoding="utf-8") as fh:
+            for line in fh:
+                if line.startswith("oom_kill "):
+                    return int(line.split()[1])
+    except (OSError, ValueError):
+        pass
+    return 0
+
+
 def release_gpu_memory():
     """Return this process' cached VRAM to the driver.
 
@@ -4031,7 +4121,39 @@ def gpu_worker_slots(group, size, *, vram_margin=0.7):
     return max(1, min(size, allowed))
 
 
-def submit_gpu_batch(group, jobs, *, size, on_result=None, on_wait=None):
+#: A parallel solve gives up a process when the memory left before the OOM
+#: killer is below the larger of these: absolute, and as a share of the limit.
+SOLVER_TRIM_HEADROOM_BYTES = 6 * 1024**3
+SOLVER_TRIM_HEADROOM_FRACTION = 0.05
+#: How often the headroom is read while a batch runs.
+SOLVER_MEMORY_POLL_S = 5.0
+#: Runs of one job (the first included) before its failure is the batch's.
+SOLVER_JOB_ATTEMPTS = 3
+
+
+def _solver_memory_low():
+    headroom, limit = solver_memory_headroom()
+    if headroom is None:
+        return False
+    floor = max(
+        SOLVER_TRIM_HEADROOM_BYTES,
+        int(SOLVER_TRIM_HEADROOM_FRACTION * int(limit or 0)),
+    )
+    return headroom < floor
+
+
+def _is_device_oom(exc):
+    from concurrent.futures import BrokenExecutor
+
+    if isinstance(exc, BrokenExecutor):
+        return False
+    text = str(exc).lower()
+    return "out of memory" in text or "cuda_error_out_of_memory" in text
+
+
+def submit_gpu_batch(
+    group, jobs, *, size, on_result=None, on_wait=None, on_notice=None
+):
     """Run several solver jobs across a group's own children, in parallel.
 
     ``jobs`` is a sequence of ``(fn, args, kwargs)``. Results come back in
@@ -4045,8 +4167,22 @@ def submit_gpu_batch(group, jobs, *, size, on_result=None, on_wait=None):
     The children are kept between calls exactly as ``submit_gpu_job``'s warm
     worker is: each one loads the scene once and answers every later job
     from it. ``release_gpu_worker(group)`` ends them.
+
+    A child that dies does not take the batch with it. Its job goes back to
+    the head of the queue for a fresh process, and every job already done
+    is kept -- a window of a walk is hours, and losing finished ones to a
+    sibling's crash used to cost the whole combination. When the death is
+    memory (the cgroup's OOM counter moved, CUDA ran out, or the headroom
+    is low when it happens), the slot is closed instead of refilled: the
+    run continues with one process fewer. The same trimming happens before
+    it comes to that -- the youngest job is withdrawn and requeued once the
+    headroom drops below ``SOLVER_TRIM_HEADROOM_*``, so the OOM killer
+    never gets to pick a victim (it may pick the Streamlit server). A job
+    that fails ``SOLVER_JOB_ATTEMPTS`` times raises, as does any ordinary
+    exception from a job. ``on_notice(text)`` hears each of these events.
     """
     import time as _time
+    from concurrent.futures import FIRST_COMPLETED, BrokenExecutor, wait
 
     from joblib.externals.loky import ProcessPoolExecutor
 
@@ -4056,18 +4192,41 @@ def submit_gpu_batch(group, jobs, *, size, on_result=None, on_wait=None):
     size = max(1, min(int(size), len(jobs)))
     # `size` is how many run at once; `jobs` may be many more than that.
     store = _gpu_pool_store()
+
+    def _new_pool():
+        # An explicit idle timeout, because loky's default reaps a worker
+        # between frames and the next one then reloads the city. These die
+        # when the view is switched off, which is `release_gpu_worker`'s job
+        # and the only thing that returns their VRAM anyway.
+        return ProcessPoolExecutor(max_workers=1, timeout=1800)
+
     with store["lock"]:
         pools = store["pools"].setdefault(group, [])
         while len(pools) < size:
-            # An explicit idle timeout, because loky's default reaps a
-            # worker between frames and the next one then reloads the
-            # city. These die when the view is switched off, which is
-            # `release_gpu_worker`'s job and the only thing that returns
-            # their VRAM anyway.
-            pools.append(ProcessPoolExecutor(max_workers=1, timeout=1800))
-        pools = pools[:size]
+            pools.append(_new_pool())
+        slots: list[Any] = pools[:size]
 
-    from concurrent.futures import FIRST_COMPLETED, wait
+    def _notice(text):
+        logger.warning(text)
+        if on_notice is not None:
+            on_notice(text)
+
+    def _drop(slot, replace):
+        """Kill a slot's child; give the slot a fresh one or close it."""
+        old = slots[slot]
+        fresh = _new_pool() if replace else None
+        slots[slot] = fresh
+        with store["lock"]:
+            shared = store["pools"].get(group, [])
+            if old in shared:
+                if fresh is not None:
+                    shared[shared.index(old)] = fresh
+                else:
+                    shared.remove(old)
+        try:
+            old.shutdown(wait=False, kill_workers=True)
+        except Exception:
+            pass
 
     # Handed out one at a time, not dealt round-robin up front. Jobs here
     # are not equal: a window of a walk costs what its receivers cost, and
@@ -4076,30 +4235,112 @@ def submit_gpu_batch(group, jobs, *, size, on_result=None, on_wait=None):
     # through its share while the rest sit idle -- the load falls off and
     # so does the rate. A worker that finishes takes the next window
     # instead, and keeps the scene it already has.
-    queue = list(enumerate(jobs))
+    queue = list(range(len(jobs)))
     results: list[Any] = [None] * len(jobs)
+    attempts = [0] * len(jobs)
     started = _time.time()
     inflight = {}
+    oom_kills = cgroup_oom_kills()
+    next_memory_check = started + SOLVER_MEMORY_POLL_S
 
-    def _feed(pool_index):
-        if not queue:
+    def _feed(slot):
+        if not queue or slots[slot] is None:
             return
-        index, (fn, args, kwargs) = queue.pop(0)
-        future = pools[pool_index].submit(fn, *args, **dict(kwargs or {}))
-        inflight[future] = (index, pool_index)
+        index = queue.pop(0)
+        fn, args, kwargs = jobs[index]
+        try:
+            future = slots[slot].submit(fn, *args, **dict(kwargs or {}))
+        except BrokenExecutor:
+            # Kept from an earlier call whose child has died since (or was
+            # killed idle): it refuses work before running any.
+            _drop(slot, replace=True)
+            future = slots[slot].submit(fn, *args, **dict(kwargs or {}))
+        inflight[future] = (index, slot, _time.time())
 
-    for slot in range(len(pools)):
-        _feed(slot)
+    def _live():
+        return sum(pool is not None for pool in slots)
+
+    def _idle():
+        busy = {slot for _i, slot, _t in inflight.values()}
+        return [
+            slot
+            for slot, pool in enumerate(slots)
+            if pool is not None and slot not in busy
+        ]
+
+    def _fill():
+        for slot in _idle():
+            _feed(slot)
+
+    _fill()
     while inflight:
         landed, _ = wait(
             set(inflight), timeout=0.4, return_when=FIRST_COMPLETED
         )
         for future in landed:
-            index, pool_index = inflight.pop(future)
-            results[index] = future.result()
+            index, slot, _t0 = inflight.pop(future)
+            try:
+                results[index] = future.result()
+            except Exception as exc:
+                died = isinstance(exc, BrokenExecutor)
+                device_oom = _is_device_oom(exc)
+                if not (died or device_oom):
+                    raise
+                attempts[index] += 1
+                if attempts[index] >= SOLVER_JOB_ATTEMPTS:
+                    raise
+                kills = cgroup_oom_kills()
+                memory = (
+                    device_oom or kills > oom_kills or _solver_memory_low()
+                )
+                oom_kills = kills
+                queue.insert(0, index)
+                shrink = memory and _live() > 1
+                _notice(
+                    f"Job {index + 1}/{len(jobs)} lost its process "
+                    f"({type(exc).__name__}"
+                    f"{', memory' if memory else ''}); requeued, attempt "
+                    f"{attempts[index] + 1}/{SOLVER_JOB_ATTEMPTS}"
+                    + (
+                        f", running on {_live() - 1} process(es) from now"
+                        if shrink
+                        else ""
+                    )
+                    + "."
+                )
+                _drop(slot, replace=not shrink)
+                continue
             if on_result is not None:
                 on_result(index, _time.time() - started)
-            _feed(pool_index)
+        now = _time.time()
+        if now >= next_memory_check:
+            next_memory_check = now + SOLVER_MEMORY_POLL_S
+            if _live() > 1 and _solver_memory_low():
+                idle = _idle()
+                if idle:
+                    # An idle child still holds its scene; it goes first.
+                    _drop(idle[-1], replace=False)
+                    _notice(
+                        "Memory headroom low: an idle solver process was "
+                        f"closed, {_live()} process(es) left."
+                    )
+                else:
+                    # The youngest job has the least to lose.
+                    future, (index, slot, _t0) = max(
+                        inflight.items(), key=lambda item: item[1][2]
+                    )
+                    del inflight[future]
+                    queue.insert(0, index)
+                    _drop(slot, replace=False)
+                    _notice(
+                        "Memory headroom low: job "
+                        f"{index + 1}/{len(jobs)} withdrawn and requeued, "
+                        f"running on {_live()} process(es) from now."
+                    )
+        # Every live slot without a job takes the next one -- including a
+        # job just requeued while the slot that would have refilled was
+        # closed, which would otherwise end the loop with it never run.
+        _fill()
         if on_wait is not None and inflight:
             on_wait()
     return results
