@@ -15,7 +15,6 @@ exclude:
   - "delta_tau_correlation.py"
   - "dynamic_scenario.py"
   - "eve_trajectory.py"
-  - "filter_specs.py"
   - "first_component_eval.py"
   - "first_component_worker.py"
   - "peak_windows.py"
