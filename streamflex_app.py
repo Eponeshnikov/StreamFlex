@@ -6,7 +6,6 @@ from datetime import datetime
 import psutil
 import streamlit as st
 from loguru import logger
-from streamlit.components.v1 import html
 
 from data_manager import DataManager
 from plugin_manager import PluginManager
@@ -1035,7 +1034,9 @@ def main():
 
         with tab2:
             # Colored log display with auto-scroll (existing code)
-            html(
+            # st.iframe: components.v1.html is removed after Streamlit
+            # 2026-06; an HTML string is embedded the same way, with JS.
+            st.iframe(
                 f"""
                 <div id="logContainer" 
                     style="
@@ -1051,9 +1052,16 @@ def main():
                     {get_colored_logs(100)}
                 </div>
                 <script>
-                    // Auto-scroll to bottom
+                    // Auto-scroll to bottom. The frame sits in a tab that is
+                    // hidden on load (zero height, nothing to scroll), so
+                    // scroll again once it is laid out / becomes visible.
                     var container = document.getElementById('logContainer');
-                    container.scrollTop = container.scrollHeight;
+                    function toBottom() {{
+                        container.scrollTop = container.scrollHeight;
+                    }}
+                    toBottom();
+                    window.addEventListener('load', toBottom);
+                    window.addEventListener('resize', toBottom);
                 </script>
                 """,
                 height=300,
