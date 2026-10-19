@@ -1,12 +1,45 @@
+import importlib.util
 import os
 import time
 from pathlib import Path
+from types import ModuleType
 from typing import Literal
 
 import streamlit as st
 import toml
 from loguru import logger
 from streamlit.errors import StreamlitAPIException
+
+#: Modules of a plugin folder, loaded by path, one instance per file.
+_SIBLING_MODULES: dict[str, ModuleType] = {}
+
+
+def load_sibling(anchor: str, filename: str) -> ModuleType:
+    """The module ``filename`` in the folder of ``anchor`` (a ``__file__``).
+
+    A plugin folder name is not importable (``CIR-Generator``), so its
+    modules are loaded by path. They are deliberately kept out of
+    ``sys.modules``: cloudpickle then ships their functions and classes to
+    loky workers by value, and a worker never has to import the plugin.
+    Every caller gets the same module object, so classes keep one identity
+    within a process.
+    """
+    path = os.path.join(os.path.dirname(os.path.abspath(anchor)), filename)
+    module = _SIBLING_MODULES.get(path)
+    if module is None:
+        folder = os.path.basename(os.path.dirname(path))
+        name = f"{folder}.{os.path.splitext(filename)[0]}"
+        spec = importlib.util.spec_from_file_location(name, path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Cannot load {path}")
+        module = importlib.util.module_from_spec(spec)
+        _SIBLING_MODULES[path] = module
+        try:
+            spec.loader.exec_module(module)
+        except BaseException:
+            del _SIBLING_MODULES[path]
+            raise
+    return module
 
 
 class Plugin:
