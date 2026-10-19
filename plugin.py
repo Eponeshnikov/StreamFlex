@@ -1,5 +1,6 @@
 import importlib.util
 import os
+import sys
 import time
 from pathlib import Path
 from types import ModuleType
@@ -10,9 +11,6 @@ import toml
 from loguru import logger
 from streamlit.errors import StreamlitAPIException
 
-#: Modules of a plugin folder, loaded by path, one instance per file.
-_SIBLING_MODULES: dict[str, ModuleType] = {}
-
 
 def load_sibling(anchor: str, filename: str) -> ModuleType:
     """The module ``filename`` in the folder of ``anchor`` (a ``__file__``).
@@ -21,11 +19,17 @@ def load_sibling(anchor: str, filename: str) -> ModuleType:
     modules are loaded by path. They are deliberately kept out of
     ``sys.modules``: cloudpickle then ships their functions and classes to
     loky workers by value, and a worker never has to import the plugin.
-    Every caller gets the same module object, so classes keep one identity
-    within a process.
+
+    The plugin manager executes ``plugin.py`` afresh on every rerun, and
+    module-level values (the run timestamp, scratch roots) are read then.
+    So the modules are cached per load of the calling plugin, not per
+    process: a fresh ``plugin.py`` gets fresh siblings, and within one load
+    every caller shares one module object, so classes keep one identity.
     """
     path = os.path.join(os.path.dirname(os.path.abspath(anchor)), filename)
-    module = _SIBLING_MODULES.get(path)
+    caller = sys._getframe(1).f_globals
+    loaded = caller.setdefault("__plugin_siblings__", {})
+    module = loaded.get(path)
     if module is None:
         folder = os.path.basename(os.path.dirname(path))
         name = f"{folder}.{os.path.splitext(filename)[0]}"
@@ -33,11 +37,13 @@ def load_sibling(anchor: str, filename: str) -> ModuleType:
         if spec is None or spec.loader is None:
             raise ImportError(f"Cannot load {path}")
         module = importlib.util.module_from_spec(spec)
-        _SIBLING_MODULES[path] = module
+        # The sibling's own load_sibling calls share this load's modules.
+        module.__dict__["__plugin_siblings__"] = loaded
+        loaded[path] = module
         try:
             spec.loader.exec_module(module)
         except BaseException:
-            del _SIBLING_MODULES[path]
+            del loaded[path]
             raise
     return module
 
