@@ -60,6 +60,11 @@ class PluginManager:
 
             self.logger.debug("Processing directory entry", entry=plugin_name)
 
+            # .git, .vscode, __pycache__ etc. are never plugins: skip them
+            # without the per-rerun "missing plugin.py" warning.
+            if plugin_name.startswith((".", "__")):
+                continue
+
             if not entry.is_dir():
                 self.logger.warning(
                     "Skipping non-directory plugin", entry=plugin_name
