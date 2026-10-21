@@ -355,6 +355,28 @@ def payload_array_bytes(obj):
     return 0
 
 
+def payload_file_bytes(obj):
+    """Bytes of every saved array file (``.bin`` memmap, ``.pickle``) that a
+    string under ``obj`` names.
+
+    With "Use np.memmap" or "Save Results in File" a stage hands the next
+    one a *path* instead of an array, and :func:`payload_array_bytes` reads
+    that as nothing -- while the worker that receives it loads the whole
+    file and computes on it. An OptiReceiver run of 2026-10-10 (and again
+    2026-10-21) planned 4 workers on that zero and took Streamlit down at
+    the cgroup's 100 GiB.
+    """
+    if isinstance(obj, str):
+        if obj.endswith((".bin", ".pickle")) and os.path.isfile(obj):
+            return int(os.path.getsize(obj))
+        return 0
+    if isinstance(obj, dict):
+        return sum(payload_file_bytes(v) for v in obj.values())
+    if isinstance(obj, (list, tuple)):
+        return sum(payload_file_bytes(v) for v in obj)
+    return 0
+
+
 def worker_payload_bytes(*payload_lists, working_set_factor=None):
     """RAM one configuration costs a worker, measured from the data itself.
 
