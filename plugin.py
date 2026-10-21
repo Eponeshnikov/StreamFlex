@@ -252,3 +252,51 @@ class Plugin:
                 st.rerun(scope=local_rerun_scope)
 
         return widget_value
+
+    def create_file_input(
+        self, widget_manager, widget_name, label, **file_input_kwargs
+    ):
+        """``utils.file_input`` whose server-folder choice is persisted.
+
+        ``file_input`` is built from raw Streamlit widgets, so on its own
+        the chosen file never reaches the WidgetManager and a snapshot
+        restores everything but it. Here the folder and the file are stored
+        under ``widget_name`` as ``{"folder", "path"}`` and seeded back into
+        the raw keys when those are missing, which is the case after a
+        snapshot load: the keys carry the plugin prefix, so
+        ``WidgetManager.import_state`` clears them with the rest. A browser
+        upload has no path to keep and is not persisted. A stored file that
+        is gone is not seeded (the picker starts empty).
+        """
+        from utils import file_input
+
+        key = f"{self.get_name()}_{widget_name}"
+        # The store itself, not ``load_widget_state``: its read-through
+        # cache keeps the first value it returned, and the choice saved
+        # below would then look unsaved on every later run.
+        saved = st.session_state.widget_states.get(self.get_name(), {}).get(
+            widget_name
+        )
+        if (
+            isinstance(saved, dict)
+            and f"{key}__selectbox" not in st.session_state
+            and f"{key}__multiselect" not in st.session_state
+            and saved.get("path")
+            and os.path.isfile(saved["path"])
+        ):
+            st.session_state[f"{key}__source_is_upload"] = False
+            st.session_state[f"{key}__folder"] = saved["folder"]
+            st.session_state[f"{key}__selectbox"] = saved["path"]
+
+        chosen = file_input(label, key=key, **file_input_kwargs)
+
+        if not st.session_state.get(f"{key}__source_is_upload"):
+            current = {
+                "folder": st.session_state.get(f"{key}__folder"),
+                "path": getattr(chosen, "path", None),
+            }
+            if current != saved:
+                widget_manager.save_widget_state(
+                    self.get_name(), widget_name, current
+                )
+        return chosen

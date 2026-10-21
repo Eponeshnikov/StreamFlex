@@ -150,9 +150,15 @@ def file_input(
         type_list = [type] if isinstance(type, str) else list(type)
         exts = [t.lower().lstrip(".") for t in type_list]
 
+    # A default only where the key holds nothing yet: a caller may seed the
+    # keys (a restored choice), and value= next to a seeded key is a
+    # Streamlit warning on every run.
+    def _default(sub: str, value):
+        return {} if f"{key}{sub}" in st.session_state else {"value": value}
+
     use_upload = target.toggle(
         "📤 Upload from browser instead",
-        value=(default_source == "upload"),
+        **_default("__source_is_upload", default_source == "upload"),
         key=f"{key}__source_is_upload",
         help="Off: pick files already present in a folder on the server. "
         "On: upload from your local machine (slow over a poor connection).",
@@ -173,7 +179,7 @@ def file_input(
     # --- Server-folder mode ---
     folder = target.text_input(
         "📁 Server folder to scan",
-        value=default_dir,
+        **_default("__folder", default_dir),
         key=f"{key}__folder",
         help="Path on the server to search for files (this folder only).",
     )
