@@ -129,7 +129,9 @@ def scene_layer_of(name: str) -> str:
     low = str(name).lower()
     if low.startswith(("building_", "roof_")):
         return "buildings"
-    if low.startswith("window"):
+    # LOD3 facades: glass and frames (`windows*`) plus railings,
+    # canopies and steel doors (`facade_*`).
+    if low.startswith(("window", "facade")):
         return "windows"
     if low.startswith("tree"):
         return "trees"
