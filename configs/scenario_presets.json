@@ -170,7 +170,7 @@
     "enabled": true,
     "per_variant": false,
     "walkers_yield": true,
-    "seed_attempts": 8,
+    "seed_attempts": 1,
     "derive_network": false,
     "options": {
      "n_cars": 1000,
@@ -324,7 +324,7 @@
     "enabled": true,
     "per_variant": false,
     "walkers_yield": true,
-    "seed_attempts": 8,
+    "seed_attempts": 1,
     "derive_network": false,
     "options": {
      "n_cars": 1000,
