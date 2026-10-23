@@ -46,7 +46,12 @@
   "  eve -- the Eve tab's fields. parked -- presets + seed (the CIR",
   "    Generator's defaults for the rest). traffic -- options as in a",
   "    traffic file; dt/n_steps always come from the walk. per_variant:",
-  "    false = traffic only for the variant you keep (it is the slow part)."
+  "    false = traffic only for the variant you keep (it is the slow part).",
+  "  crowd -- walking people on the pavements (traffic.crowd): people per km",
+  "    of pavement, walking speed, standing share, pavements along roads",
+  "    (auto/yes/no), avoid_cars = wait for cars at crossings. Saved as",
+  "    <name>_people.json next to the traffic; built with it, for the kept",
+  "    variant."
  ],
  "presets": {
   "realistic_long": {
@@ -145,6 +150,21 @@
    "parked": {
     "presets": ["sparse"],
     "seed": 0
+   },
+   "crowd": {
+    "enabled": true,
+    "derive_network": true,
+    "options": {
+     "density_per_km": 20.0,
+     "dt": 0.1,
+     "n_steps": 301,
+     "speed_mean_ms": 1.35,
+     "speed_sd_ms": 0.2,
+     "standing_share": 0.1,
+     "road_sidewalks": "auto",
+     "avoid_cars": true,
+     "seed": 0
+    }
    },
    "traffic": {
     "enabled": true,
@@ -284,6 +304,21 @@
    "parked": {
     "presets": ["sparse"],
     "seed": 0
+   },
+   "crowd": {
+    "enabled": true,
+    "derive_network": true,
+    "options": {
+     "density_per_km": 20.0,
+     "dt": 0.1,
+     "n_steps": 301,
+     "speed_mean_ms": 1.35,
+     "speed_sd_ms": 0.2,
+     "standing_share": 0.1,
+     "road_sidewalks": "auto",
+     "avoid_cars": true,
+     "seed": 0
+    }
    },
    "traffic": {
     "enabled": true,

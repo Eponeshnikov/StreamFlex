@@ -138,8 +138,9 @@ def scene_layer_of(name: str) -> str:
     if low.startswith(("road", "bridge")):
         return "roads"
     # Parked cars are inserted into a loaded scene rather than written into
-    # it (pages/osm_scene/cars.py), always as one merged shape.
-    if low.startswith(("parked_cars", "car_")):
+    # it (pages/osm_scene/cars.py), always as one merged shape; moving cars
+    # and walking people per velocity group.
+    if low.startswith(("parked_cars", "car_", "moving_cars", "moving_people")):
         return "vehicles"
     if low.startswith("surface"):
         return "surfaces"
