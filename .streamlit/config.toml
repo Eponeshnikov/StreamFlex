@@ -6,6 +6,9 @@ maxUploadSize = 250
 # and is recovered from the autosave snapshot instead. A kept session holds the
 # whole data bus, so this is not free; streamlit's own default is 120 s.
 disconnectedSessionTTL = 1800
+# Serves ./static at app/static/: three.js (static/three) and the binary
+# scene meshes the three.js 3D renderer fetches (static/scene3d, generated).
+enableStaticServing = true
 
 [client]
 # Показывать пункты "Clear cache"/"Rerun" в меню даже при доступе не с localhost

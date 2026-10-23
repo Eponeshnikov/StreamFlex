@@ -201,3 +201,6 @@ CLAUDE.md
 .agents
 .codex
 .kilo
+
+# Binary meshes written for the three.js 3D renderer (utils/scene_three.py)
+static/scene3d/

@@ -12,10 +12,23 @@ from utils.radiomap import (
     add_planar_radiomap_to_figure,
 )
 from utils.scene_mesh import (
+    DETAIL_BUDGET_TRIANGLES,
+    SCENE_LAYERS,
     SIONNA_PATH_COLORS,
+    backdrop_note,
     scene_display_controls,
     scene_mesh_traces,
 )
+
+
+def _device_focus(scene, tx_names=None, rx_names=None):
+    """Where the shown devices are (x, y): the TX first, else the RX."""
+    for devices, names in ((scene.transmitters, tx_names), (scene.receivers, rx_names)):
+        picked = [devices[n] for n in (names if names is not None else devices) if n in devices]
+        if picked:
+            xyz = np.array([np.asarray(d.position.numpy()).ravel()[:3] for d in picked])
+            return xyz[:, :2].mean(axis=0)
+    return None
 
 
 def render_sionna_scene_plotly(
@@ -51,6 +64,8 @@ def render_sionna_scene_plotly(
     controls_container=None,
     background=False,
     power_time_index=None,
+    backdrop_scene=None,
+    detail_budget: int | None = DETAIL_BUDGET_TRIANGLES,
 ) -> go.Figure:
     """
     Render a Sionna scene using Plotly in Streamlit.
@@ -65,6 +80,14 @@ def render_sionna_scene_plotly(
     Pass ``show_layer_controls=True`` to have the multiselect and the
     legend toggle rendered here instead, into ``controls_container``.
 
+    ``backdrop_scene`` draws the buildings and ground from another load
+    of the same file -- one with ``merge_shapes=False``. A scene loaded for
+    the ray tracer is merged, which throws away the shape names the layer
+    filter goes by: land cover and LOD3 walls cannot be told apart in it.
+    Shapes inserted into ``scene`` after loading (parked cars) are still
+    drawn from it. ``detail_budget=None`` draws heavy layers in full (for
+    :func:`utils.scene_three.three_chart`).
+
     With ``background=True`` the scene mesh is welded on a worker thread:
     the figure comes back without a backdrop and with
     ``meta["pending"] = True`` until it is ready, so the caller can draw
@@ -76,24 +99,42 @@ def render_sionna_scene_plotly(
     path_widths = {"los": 4}
 
     if show_objects:
+        mesh_scene = backdrop_scene if backdrop_scene is not None else scene
         if show_layer_controls:
             hidden_layers, material_legend = scene_display_controls(
-                scene, widget_key=widget_key, container=controls_container
+                mesh_scene, widget_key=widget_key, container=controls_container
             )
         built = scene_mesh_traces(
-            scene,
+            mesh_scene,
             hidden_layers=hidden_layers,
             opacity=building_opacity,
             material_legend=material_legend,
             background=background,
+            focus=_device_focus(scene, selected_tx_names, selected_rx_names),
+            budget=detail_budget,
         )
         if built is None:
             fig.update_layout(meta={"pending": True})
         else:
             traces, info = built
+            if backdrop_scene is not None and "vehicles" not in (hidden_layers or ()):
+                cars = scene_mesh_traces(
+                    scene,
+                    hidden_layers=[layer for layer in SCENE_LAYERS if layer != "vehicles"],
+                    opacity=building_opacity,
+                    material_legend=material_legend,
+                )
+                if cars is not None:
+                    traces = [*traces, *cars[0]]
             for trace in traces:
                 fig.add_trace(trace)
             fig.update_layout(meta={**info, "pending": False})
+            note = backdrop_note(info)
+            if note:
+                fig.add_annotation(
+                    text=note, xref="paper", yref="paper", x=0.5, y=0.98, showarrow=False,
+                    font={"color": "#c62828" if info.get("too_heavy") else "#8d6e00"},
+                )
 
     if radio_map is not None:
         try:

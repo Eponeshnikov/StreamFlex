@@ -1,0 +1,3 @@
+three.js r186 (0.186.1, npm 'three'), MIT -- see LICENSE.
+OrbitControls.js: examples/jsm/controls, its bare 'three' import pointed at ./three.module.js.
+Served by Streamlit static serving at app/static/three/ for utils/scene_three.py.
