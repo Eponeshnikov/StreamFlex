@@ -1,0 +1,23 @@
+{
+  "_doc": "Tags restored on top of every Overpass response (pages/osm_scene/osm.py, apply_tag_overrides). Keyed by '<type>/<id>'; a tag is only filled in where OSM has no value for that key, so a later fix in OSM itself wins. Each entry says which edit removed what.",
+  "way/230132594": {
+    "why": "Kul Sharif, corner tower: roof stripped by changeset 189280609 (2026-09-20); tags of v5 (2024-02-25).",
+    "tags": {"roof:shape": "pyramidal", "roof:height": "3", "roof:colour": "#3FA4B6"}
+  },
+  "way/230132595": {
+    "why": "Kul Sharif minaret: spire stripped by changeset 189280609 (2026-09-20); tags of v5 (2024-02-25).",
+    "tags": {"roof:shape": "pyramidal", "roof:height": "5", "roof:colour": "#3FA4B6"}
+  },
+  "way/230132598": {
+    "why": "Kul Sharif minaret: spire stripped by changeset 189280609 (2026-09-20); tags of v5 (2024-02-25).",
+    "tags": {"roof:shape": "pyramidal", "roof:height": "5", "roof:colour": "#3FA4B6"}
+  },
+  "way/230132599": {
+    "why": "Kul Sharif minaret: spire stripped by changeset 189280609 (2026-09-20); tags of v4 (2024-02-25).",
+    "tags": {"roof:shape": "pyramidal", "roof:height": "5", "roof:colour": "#3FA4B6"}
+  },
+  "way/230132600": {
+    "why": "Kul Sharif minaret: spire stripped by changeset 189280609 (2026-09-20); tags of v4 (2024-02-25).",
+    "tags": {"roof:shape": "pyramidal", "roof:height": "5", "roof:colour": "#3FA4B6"}
+  }
+}
