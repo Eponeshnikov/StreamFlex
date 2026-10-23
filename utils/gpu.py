@@ -345,6 +345,10 @@ SOLVER_TRIM_HEADROOM_FRACTION = 0.05
 SOLVER_MEMORY_POLL_S = 5.0
 #: Runs of one job (the first included) before its failure is the batch's.
 SOLVER_JOB_ATTEMPTS = 3
+#: A slot whose job ran the card out of memory next to its siblings waits
+#: for one of them to finish; after this many such waits in a row with no
+#: job finished on it, the card does not hold that many and it is closed.
+SOLVER_OOM_PARKS = 3
 
 
 def _solver_memory_low():
@@ -358,13 +362,75 @@ def _solver_memory_low():
     return headroom < floor
 
 
-def _is_device_oom(exc):
+def is_device_oom(exc):
+    """Whether ``exc`` is the card running out of memory, at any depth.
+
+    Dr.Jit never raises the allocation failure itself: ``jit_malloc(): out
+    of memory!`` comes wrapped in ``dr.while_loop(): encountered an
+    exception (see above)``, once per loop level, and out of a loky child
+    the original survives only as the text of a ``_RemoteTraceback`` cause.
+    Reading ``str(exc)`` alone missed every one of them (2026-10-23: a
+    3-process walk lost its whole combination to one window's OOM instead of
+    requeueing it), so the whole chain is read.
+    """
     from concurrent.futures import BrokenExecutor
 
     if isinstance(exc, BrokenExecutor):
         return False
-    text = str(exc).lower()
-    return "out of memory" in text or "cuda_error_out_of_memory" in text
+    seen = set()
+    node = exc
+    while node is not None and id(node) not in seen:
+        seen.add(id(node))
+        text = str(node).lower()
+        if "out of memory" in text or "cuda_error_out_of_memory" in text:
+            return True
+        node = node.__cause__ or node.__context__
+    return False
+
+
+_is_device_oom = is_device_oom
+
+
+def device_free_bytes():
+    """Free VRAM on the devices this process has a context on, or None.
+
+    Through the driver rather than ``torch.cuda.mem_get_info``, which would
+    give a solver child a torch CUDA context (~420 MiB) just to ask.
+    """
+    cuda = _cuda_driver()
+    devices = _cuda_devices(cuda) if cuda is not None else []
+    if not devices:
+        return None
+    return _device_free_bytes(cuda, devices)
+
+
+def gpu_memory_held_by_others():
+    """VRAM held by every *other* compute process, or None if unreadable."""
+    try:
+        out = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-compute-apps=pid,used_memory",
+                "--format=csv,noheader,nounits",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    me, held = os.getpid(), 0
+    for line in out.splitlines():
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) != 2 or not parts[0].isdigit() or int(parts[0]) == me:
+            continue
+        try:
+            held += int(float(parts[1])) * 1024**2
+        except ValueError:
+            continue
+    return held
+
 
 
 def submit_gpu_batch(
@@ -396,6 +462,15 @@ def submit_gpu_batch(
     never gets to pick a victim (it may pick the Streamlit server). A job
     that fails ``SOLVER_JOB_ATTEMPTS`` times raises, as does any ordinary
     exception from a job. ``on_notice(text)`` hears each of these events.
+
+    Running the card out of memory while siblings are still solving is not
+    the job's failure: they hold what it needed and hand it back when their
+    jobs end. So it costs no attempt -- the job goes back to the head of the
+    queue and its slot waits (its child is killed, which frees what it held)
+    until the next job lands, then takes work again. A slot that has to wait
+    ``SOLVER_OOM_PARKS`` times in a row is closed: the card does not hold
+    that many. A batch that raises kills its children still at work, so
+    they do not sit on the card the caller's retry is about to need.
     """
     import time as _time
     from concurrent.futures import FIRST_COMPLETED, BrokenExecutor, wait
@@ -458,6 +533,10 @@ def submit_gpu_batch(
     inflight = {}
     oom_kills = cgroup_oom_kills()
     next_memory_check = started + SOLVER_MEMORY_POLL_S
+    # Slots waiting for a sibling to finish, longest-waiting first, and how
+    # many times in a row each one has had to.
+    parked: list[int] = []
+    oom_parks = [0] * size
 
     def _feed(slot):
         if not queue or slots[slot] is None:
@@ -484,81 +563,128 @@ def submit_gpu_batch(
             if pool is not None and slot not in busy
         ]
 
+    def _resume(force=False):
+        """Give the longest-waiting parked slot a fresh child."""
+        if not parked or (not force and _solver_memory_low()):
+            return
+        slot = parked.pop(0)
+        slots[slot] = _new_pool()
+        with store["lock"]:
+            store["pools"].setdefault(group, []).append(slots[slot])
+
     def _fill():
+        if queue and not inflight and not _live():
+            # Everything else has finished or gone: nothing is left to
+            # wait for, so a parked slot runs whatever the headroom says.
+            _resume(force=True)
         for slot in _idle():
             _feed(slot)
 
-    _fill()
-    while inflight:
-        landed, _ = wait(
-            set(inflight), timeout=0.4, return_when=FIRST_COMPLETED
-        )
-        for future in landed:
-            index, slot, _t0 = inflight.pop(future)
-            try:
-                results[index] = future.result()
-            except Exception as exc:
-                died = isinstance(exc, BrokenExecutor)
-                device_oom = _is_device_oom(exc)
-                if not (died or device_oom):
-                    raise
-                attempts[index] += 1
-                if attempts[index] >= SOLVER_JOB_ATTEMPTS:
-                    raise
-                kills = cgroup_oom_kills()
-                memory = (
-                    device_oom or kills > oom_kills or _solver_memory_low()
-                )
-                oom_kills = kills
-                queue.insert(0, index)
-                shrink = memory and _live() > 1
-                _notice(
-                    f"Job {index + 1}/{len(jobs)} lost its process "
-                    f"({type(exc).__name__}"
-                    f"{', memory' if memory else ''}); requeued, attempt "
-                    f"{attempts[index] + 1}/{SOLVER_JOB_ATTEMPTS}"
-                    + (
-                        f", running on {_live() - 1} process(es) from now"
-                        if shrink
-                        else ""
-                    )
-                    + "."
-                )
-                _drop(slot, replace=not shrink)
-                continue
-            if on_result is not None:
-                on_result(index, _time.time() - started)
-        now = _time.time()
-        if now >= next_memory_check:
-            next_memory_check = now + SOLVER_MEMORY_POLL_S
-            if _live() > 1 and _solver_memory_low():
-                idle = _idle()
-                if idle:
-                    # An idle child still holds its scene; it goes first.
-                    _drop(idle[-1], replace=False)
-                    _notice(
-                        "Memory headroom low: an idle solver process was "
-                        f"closed, {_live()} process(es) left."
-                    )
-                else:
-                    # The youngest job has the least to lose.
-                    future, (index, slot, _t0) = max(
-                        inflight.items(), key=lambda item: item[1][2]
-                    )
-                    del inflight[future]
-                    queue.insert(0, index)
-                    _drop(slot, replace=False)
-                    _notice(
-                        "Memory headroom low: job "
-                        f"{index + 1}/{len(jobs)} withdrawn and requeued, "
-                        f"running on {_live()} process(es) from now."
-                    )
-        # Every live slot without a job takes the next one -- including a
-        # job just requeued while the slot that would have refilled was
-        # closed, which would otherwise end the loop with it never run.
+    try:
         _fill()
-        if on_wait is not None and inflight:
-            on_wait()
+        while inflight:
+            landed, _ = wait(
+                set(inflight), timeout=0.4, return_when=FIRST_COMPLETED
+            )
+            for future in landed:
+                index, slot, _t0 = inflight.pop(future)
+                try:
+                    results[index] = future.result()
+                except Exception as exc:
+                    died = isinstance(exc, BrokenExecutor)
+                    device_oom = is_device_oom(exc)
+                    if not (died or device_oom):
+                        raise
+                    if device_oom and inflight:
+                        oom_parks[slot] += 1
+                        queue.insert(0, index)
+                        _drop(slot, replace=False)
+                        if oom_parks[slot] < SOLVER_OOM_PARKS:
+                            parked.append(slot)
+                            _notice(
+                                f"Job {index + 1}/{len(jobs)} ran out of GPU "
+                                f"memory next to {len(inflight)} running "
+                                "process(es); requeued, its process waits for "
+                                "one of them to finish."
+                            )
+                        else:
+                            _notice(
+                                f"Job {index + 1}/{len(jobs)} ran out of GPU "
+                                f"memory next to running processes "
+                                f"{SOLVER_OOM_PARKS} times in a row; requeued, "
+                                f"running on {_live()} process(es) from now."
+                            )
+                        continue
+                    attempts[index] += 1
+                    if attempts[index] >= SOLVER_JOB_ATTEMPTS:
+                        raise
+                    kills = cgroup_oom_kills()
+                    memory = (
+                        device_oom or kills > oom_kills or _solver_memory_low()
+                    )
+                    oom_kills = kills
+                    queue.insert(0, index)
+                    shrink = memory and _live() > 1
+                    _notice(
+                        f"Job {index + 1}/{len(jobs)} lost its process "
+                        f"({type(exc).__name__}"
+                        f"{', memory' if memory else ''}); requeued, attempt "
+                        f"{attempts[index] + 1}/{SOLVER_JOB_ATTEMPTS}"
+                        + (
+                            f", running on {_live() - 1} process(es) from now"
+                            if shrink
+                            else ""
+                        )
+                        + "."
+                    )
+                    _drop(slot, replace=not shrink)
+                    continue
+                oom_parks[slot] = 0
+                # A job that lands has handed its memory back: one waiting
+                # slot may try again.
+                _resume()
+                if on_result is not None:
+                    on_result(index, _time.time() - started)
+            now = _time.time()
+            if now >= next_memory_check:
+                next_memory_check = now + SOLVER_MEMORY_POLL_S
+                if _live() > 1 and _solver_memory_low():
+                    idle = _idle()
+                    if idle:
+                        # An idle child still holds its scene; it goes first.
+                        _drop(idle[-1], replace=False)
+                        _notice(
+                            "Memory headroom low: an idle solver process was "
+                            f"closed, {_live()} process(es) left."
+                        )
+                    else:
+                        # The youngest job has the least to lose.
+                        future, (index, slot, _t0) = max(
+                            inflight.items(), key=lambda item: item[1][2]
+                        )
+                        del inflight[future]
+                        queue.insert(0, index)
+                        _drop(slot, replace=False)
+                        _notice(
+                            "Memory headroom low: job "
+                            f"{index + 1}/{len(jobs)} withdrawn and requeued, "
+                            f"running on {_live()} process(es) from now."
+                        )
+            # Every live slot without a job takes the next one -- including a
+            # job just requeued while the slot that would have refilled was
+            # closed, which would otherwise end the loop with it never run.
+            _fill()
+            if on_wait is not None and inflight:
+                on_wait()
+    except BaseException:
+        # Whatever ends the batch early -- a job's own error, attempts used
+        # up, the user stopping the script -- the siblings still solving
+        # would keep their share of the card for minutes, and the caller's
+        # retry starts on a card that is still full.
+        for _index, slot, _t0 in list(inflight.values()):
+            if slots[slot] is not None:
+                _drop(slot, replace=False)
+        raise
     return results
 
 
