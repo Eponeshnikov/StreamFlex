@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import time
 from typing import Any
 
 import numpy as np
@@ -34,8 +35,15 @@ SCENE3D_DIR = os.path.join(STATIC_DIR, "scene3d")
 #: Streamlit refuses static files over 200 MB; a mesh bigger than this is
 #: written in pieces.
 MAX_BLOB_BYTES = 150 * 1024 * 1024
-#: Mesh files kept on disk, oldest dropped first.
-MAX_SCENE3D_BYTES = 4 * 1024**3
+#: Mesh files kept on disk, oldest dropped first. Streamlit sizes the whole
+#: static folder when it starts and above 1 GB turns static serving off --
+#: three.js itself included -- so the cache stays well under that.
+MAX_SCENE3D_BYTES = 640 * 1024**2
+#: Files written this recently are never pruned: they are the pieces of the
+#: figure being drawn, which alone can pass the cap (a long crowd walk).
+PRUNE_GRACE_S = 15 * 60
+#: Streamlit's own limit (streamlit/web/bootstrap.py).
+STREAMLIT_STATIC_LIMIT = 1024**3
 
 RENDERERS = ("Plotly", "three.js")
 #: three.js by default: it takes any scene, full LOD3 included, at 60 fps.
@@ -64,6 +72,13 @@ def renderer_control(key: str, container=None, help: str | None = None) -> str:
 def three_ready() -> str | None:
     """Why three.js cannot run here (``None`` when it can)."""
     if not st.get_option("server.enableStaticServing"):
+        if _static_bytes() > STREAMLIT_STATIC_LIMIT:
+            _prune()
+            return (
+                "Streamlit turned static serving off at start-up: `static/` was over "
+                "1 GB. The 3D mesh cache (`static/scene3d/`) has been trimmed; restart "
+                "the app."
+            )
         return (
             "three.js needs `server.enableStaticServing = true` in "
             "`.streamlit/config.toml` (restart the app after setting it)."
@@ -152,13 +167,25 @@ def _prune() -> None:
     try:
         files = [os.path.join(SCENE3D_DIR, f) for f in os.listdir(SCENE3D_DIR) if f.endswith(".bin")]
         files.sort(key=os.path.getmtime, reverse=True)
+        recent = time.time() - PRUNE_GRACE_S
         total = 0
         for f in files:
             total += os.path.getsize(f)
-            if total > MAX_SCENE3D_BYTES:
+            if total > MAX_SCENE3D_BYTES and os.path.getmtime(f) < recent:
                 os.remove(f)
     except OSError:
         pass
+
+
+def _static_bytes() -> int:
+    total = 0
+    for root, _dirs, names in os.walk(STATIC_DIR):
+        for name in names:
+            try:
+                total += os.path.getsize(os.path.join(root, name))
+            except OSError:
+                pass
+    return total
 
 
 def _mesh_pieces(positions, faces, colors):

@@ -33,6 +33,14 @@ fi
 if tmux has-session -t "$SESSION" 2>/dev/null; then
     echo "tmux-сессия '$SESSION' уже запущена — подключаюсь..."
 else
+    # Streamlit sizes ./static on start-up and over 1 GB switches static serving
+    # off (three.js with it). The 3D mesh cache static/scene3d is pruned while
+    # the app runs, but can still be over at a restart: drop its oldest files.
+    if [[ -d "$ROOT/static/scene3d" ]]; then
+        find "$ROOT/static/scene3d" -maxdepth 1 -name '*.bin' -printf '%T@ %s %p\n' \
+            | sort -rn | awk -v cap=$((640 * 1024 * 1024)) '{t += $2; if (t > cap) print $3}' \
+            | xargs -r rm -f --
+    fi
     tmux new-session -d -s "$SESSION" -c "$ROOT" \
         "export XDG_RUNTIME_DIR='$XDG_RUNTIME_DIR'; export DRJIT_LIBLLVM_PATH='${DRJIT_LIBLLVM_PATH:-}'; source '$ROOT/.venv/bin/activate' && exec systemd-run --user --scope --collect -p MemoryMax='$MEM_MAX' -p MemorySwapMax=0 streamlit run '$ROOT/app.py'"
     echo "Streamlit запущен в tmux-сессии '$SESSION' (лимит памяти $MEM_MAX, без свопа)."
