@@ -9,7 +9,10 @@ and rays, annotations -- with three.js on the GPU:
 * every ``Mesh3d`` becomes a binary file under ``static/scene3d/`` (served by
   Streamlit's static serving, ``server.enableStaticServing``), fetched once
   by the browser and kept by URL, so a rerun re-sends only a manifest;
-* markers and lines travel as small JSON in the component's ``data``.
+* markers and lines travel as small JSON in the component's ``data``;
+* Plotly animation frames (``go.Frame(traces=...)``) become tracks of one
+  binary file and play in the browser (play / pause, slider, speed) --
+  no rerun per frame.
 
 three.js itself is vendored in ``static/three/`` (no CDN).
 """
@@ -51,7 +54,8 @@ def renderer_control(key: str, container=None, help: str | None = None) -> str:
         or (
             "Plotly: the usual chart, light scenes only (land cover, frames and "
             "LOD3 walls are cut to fit). three.js: draws on the GPU from binary "
-            "meshes, so a full LOD3 city (11.5M triangles) is fine; no animation."
+            "meshes, so a full LOD3 city (11.5M triangles) is fine; animations play "
+            "in the browser from one binary file."
         ),
     )
     return value or DEFAULT_RENDERER
@@ -123,6 +127,25 @@ def _write_blob(name: str, parts: list[np.ndarray]) -> None:
         fh.writelines(np.ascontiguousarray(p).tobytes() for p in parts)
     os.replace(tmp, path)
     _prune()
+
+
+def _write_rows(prefix: str, rows: np.ndarray, *identity) -> list[str]:
+    """Float32 rows as one or more files, each under ``MAX_BLOB_BYTES``.
+
+    Streamlit serves nothing over 200 MB: 7 200 walking people over 1 500
+    frames were 302 MB in one file and came back 404. Split on row
+    boundaries; the viewer fetches the parts and joins them in order.
+    """
+    rows = np.ascontiguousarray(rows, dtype=np.float32)
+    width = int(np.prod(rows.shape[1:])) if rows.ndim > 1 else 1
+    per_file = max(1, MAX_BLOB_BYTES // max(4 * width, 1))
+    key = _fingerprint(rows, *identity)
+    urls = []
+    for part, lo in enumerate(range(0, max(len(rows), 1), per_file)):
+        name = f"{prefix}_{key}_{part}.bin"
+        _write_blob(name, [rows[lo : lo + per_file]])
+        urls.append(f"scene3d/{name}")
+    return urls
 
 
 def _prune() -> None:
@@ -203,14 +226,27 @@ def _mesh_entries(trace) -> list[dict]:
     return out
 
 
+def _coords(trace) -> np.ndarray:
+    """``(n, 3)`` float32 points of a trace, NaN rows for ``None`` breaks.
+
+    Plotly keeps numpy input as numpy and lists as tuples, so neither
+    ``trace.x or ()`` nor a plain truth test works on both.
+    """
+    if trace is None:
+        return np.zeros((0, 3), np.float32)
+    cols = [np.asarray(() if getattr(trace, c) is None else getattr(trace, c), np.float32).reshape(-1) for c in "xyz"]
+    n = min(len(c) for c in cols)
+    return np.stack([c[:n] for c in cols], 1)
+
+
 def _xyz(trace) -> list:
     """Interleaved x, y, z with ``None`` breaks kept (Plotly's line gaps)."""
     out: list = []
-    for a, b, c in zip(trace.x or (), trace.y or (), trace.z or (), strict=False):
-        if a is None or b is None or c is None or not np.isfinite([a, b, c]).all():
+    for row in _coords(trace):
+        if not np.isfinite(row).all():
             out += [None, None, None]
         else:
-            out += [round(float(a), 2), round(float(b), 2), round(float(c), 2)]
+            out += [round(float(v), 2) for v in row]
     return out
 
 
@@ -241,13 +277,125 @@ def _scatter_entries(trace) -> list[dict]:
     return out
 
 
+def _instance_track(base, ti: int, per_frame: list[dict]) -> dict[str, Any] | None:
+    """A moving trace that asks for 3D bodies: one template, a pose per body.
+
+    The trace carries ``meta.instances = {"vertices", "faces"}`` (the body
+    in its own frame, x forward) and, in every frame, ``customdata`` rows of
+    ``z_ground, heading, scale_x, scale_y, scale_z`` next to its markers.
+    Written as float32 rows ``x, y, z_ground, heading, sx, sy, sz``, one
+    file per track; the viewer instances the template with them.
+    """
+    meta = base.meta if isinstance(base.meta, dict) else {}
+    template = meta.get("instances")
+    if not isinstance(template, dict):
+        return None
+    rows, offsets, start = [], [], 0
+    for by_trace in per_frame:
+        tr = by_trace.get(ti)
+        xyz = _coords(tr)
+        pose = np.asarray(() if tr is None or tr.customdata is None else tr.customdata, np.float32).reshape(-1, 5)
+        n = min(len(xyz), len(pose))
+        offsets.append(start)
+        rows.append(np.column_stack([xyz[:n, :2], pose[:n]]).astype(np.float32))
+        start += n
+    offsets.append(start)
+    blob = np.concatenate(rows) if rows else np.zeros((0, 7), np.float32)
+    urls = _write_rows("inst", blob, np.asarray(offsets))
+    marker = base.marker
+    return {
+        "kind": "instances",
+        "name": str(base.name or f"trace {ti}"),
+        "color": list(_rgb(marker.color if marker is not None and isinstance(marker.color, str) else None)),
+        "opacity": float(1.0 if base.opacity is None else base.opacity),
+        "urls": urls,
+        "count": len(blob),
+        "offsets": offsets,
+        "vertices": [float(v) for v in template.get("vertices", [])],
+        "faces": [int(v) for v in template.get("faces", [])],
+    }
+
+
+def _frame_labels(fig) -> list[str]:
+    sliders = fig.layout.sliders or ()
+    steps = sliders[0].steps if sliders else ()
+    if steps and len(steps) == len(fig.frames):
+        return [str(s.label) for s in steps]
+    return [str(f.name) for f in fig.frames]
+
+
+def _animation(fig) -> tuple[dict[str, Any] | None, set[int]]:
+    """Plotly frames as tracks of one binary file, and the traces they move.
+
+    Every frame names the traces it replaces (``go.Frame(traces=...)``);
+    each of those becomes a *track*: per frame, its points (lines keep
+    their ``None`` breaks as NaN rows). All tracks and frames are written
+    back to back as float32 xyz, with per-track offsets into that run, so
+    a thousand cars over a few hundred frames stay a few MB fetched once.
+    """
+    frames: list[Any] = list(fig.frames or ())
+    if not frames:
+        return None, set()
+    animated = sorted({int(t) for f in frames for t in (f.traces or ())})
+    if not animated:
+        return None, set()
+    per_frame = []
+    for f in frames:
+        by_trace = dict(zip((int(t) for t in f.traces or ()), f.data or (), strict=False))
+        per_frame.append(by_trace)
+    tracks, parts, start = [], [], 0
+    for ti in animated:
+        base = fig.data[ti]
+        instances = _instance_track(base, ti, per_frame)
+        if instances is not None:
+            tracks.append(instances)
+            continue
+        mode = str(base.mode or "markers")
+        offsets, colors = [], []
+        for by_trace in per_frame:
+            tr = by_trace.get(ti)
+            xyz = _coords(tr)
+            offsets.append(start)
+            parts.append(xyz)
+            start += len(xyz)
+            line = getattr(tr, "line", None) if tr is not None else None
+            colors.append(list(_rgb(line.color)) if line is not None and line.color else None)
+        offsets.append(start)
+        marker = base.marker
+        color = (base.line.color if "lines" in mode and base.line is not None else None) or (
+            marker.color if marker is not None and isinstance(marker.color, str) else None
+        )
+        tracks.append(
+            {
+                "kind": "line" if "lines" in mode else "points",
+                "name": str(base.name or f"trace {ti}"),
+                "color": list(_rgb(color, (0.9, 0.2, 0.2))),
+                "frame_colors": colors if any(colors) else None,
+                "size": float(marker.size) if marker is not None and isinstance(marker.size, (int, float)) else 6.0,
+                "opacity": float(1.0 if base.opacity is None else base.opacity),
+                "offsets": offsets,
+            }
+        )
+    blob = np.concatenate(parts) if parts else np.zeros((0, 3), np.float32)
+    urls = _write_rows("anim", blob, np.asarray([t["offsets"] for t in tracks]))
+    meta = fig.layout.meta if isinstance(fig.layout.meta, dict) else {}
+    return {
+        "urls": urls,
+        "points": len(blob),
+        "labels": _frame_labels(fig),
+        "frame_ms": float(meta.get("frame_ms", 100.0)),
+        "tracks": tracks,
+    }, set(animated)
+
+
 def figure_manifest(fig) -> dict[str, Any]:
     """What the three.js component needs from a Plotly 3D figure."""
     meshes, items = [], []
-    for trace in fig.data:
+    animation, animated = _animation(fig)
+    for index, trace in enumerate(fig.data):
         if trace.type == "mesh3d":
             meshes += _mesh_entries(trace)
-        elif trace.type == "scatter3d" and trace.visible not in (False, "legendonly"):
+        elif trace.type == "scatter3d" and trace.visible not in (False, "legendonly") and index not in animated:
             items += _scatter_entries(trace)
     notes = [str(a.text) for a in (fig.layout.annotations or ()) if a.text]
     base = "/" + str(st.get_option("server.baseUrlPath") or "").strip("/")
@@ -255,6 +403,7 @@ def figure_manifest(fig) -> dict[str, Any]:
         "base": (base.rstrip("/") + "/app/static/"),
         "meshes": meshes,
         "items": items,
+        "animation": animation,
         "notes": notes,
     }
 
@@ -274,6 +423,15 @@ _HTML = """
   </div>
   <div class="sf3d-notes"></div>
   <div class="sf3d-legend"></div>
+  <div class="sf3d-play" style="display: none">
+    <button class="sf3d-toggle" type="button" title="Play / pause">▶</button>
+    <input class="sf3d-slider" type="range" min="0" max="0" step="1" value="0">
+    <span class="sf3d-time"></span>
+    <select class="sf3d-speed" title="Playback speed">
+      <option value="0.25">×0.25</option><option value="0.5">×0.5</option>
+      <option value="1" selected>×1</option><option value="2">×2</option><option value="4">×4</option>
+    </select>
+  </div>
 </div>
 """
 
@@ -293,10 +451,18 @@ _CSS = """
                border-radius: 4px; padding: 4px 6px; }
 .sf3d-legend label { display: block; white-space: nowrap; cursor: pointer; }
 .sf3d-legend i { display: inline-block; width: 10px; height: 10px; margin: 0 4px; border-radius: 2px; }
+.sf3d-play { position: absolute; left: 8px; right: 8px; bottom: 8px; display: flex; gap: 8px; align-items: center;
+             font: 12px var(--st-font, sans-serif); color: var(--st-text-color); padding: 4px 8px; border-radius: 4px;
+             background: color-mix(in srgb, var(--st-secondary-background-color) 85%, transparent); }
+.sf3d-play button, .sf3d-play select { cursor: pointer; border: 1px solid var(--st-border-color, #888);
+             border-radius: 4px; background: var(--st-secondary-background-color); color: var(--st-text-color); }
+.sf3d-slider { flex: 1; }
+.sf3d-time { min-width: 9em; text-align: right; font-variant-numeric: tabular-nums; }
 """
 
 _JS = """
 const geometryCache = new Map();   // url -> Promise<THREE.BufferGeometry>
+const animCache = new Map();       // url -> Promise<Float32Array>
 const viewers = new WeakMap();     // parentElement -> viewer
 let threePromise = null;
 
@@ -353,10 +519,23 @@ function makeViewer(root, lib) {
   const sun = new THREE.DirectionalLight(0xffffff, 1.6);
   sun.position.set(0.4, -0.6, 1.0);
   scene.add(sun);
-  const groups = { meshes: new THREE.Group(), items: new THREE.Group() };
-  scene.add(groups.meshes, groups.items);
+  const groups = { meshes: new THREE.Group(), items: new THREE.Group(), anim: new THREE.Group() };
+  scene.add(groups.meshes, groups.items, groups.anim);
   const v = { lib, root, renderer, scene, camera, controls, groups, fitted: false, alive: true,
-              opaque: false, hidden: new Set(), meshKey: "", itemKey: "" };
+              opaque: false, hidden: new Set(), meshKey: "", itemKey: "", animKey: "",
+              anim: null, frame: 0, playing: false, lastTick: 0 };
+  const ui = {
+    box: root.querySelector(".sf3d-play"), toggle: root.querySelector(".sf3d-toggle"),
+    slider: root.querySelector(".sf3d-slider"), time: root.querySelector(".sf3d-time"),
+    speed: root.querySelector(".sf3d-speed"),
+  };
+  v.ui = ui;
+  ui.toggle.onclick = () => {
+    v.playing = !v.playing;
+    ui.toggle.textContent = v.playing ? "⏸" : "▶";
+    v.lastTick = performance.now();
+  };
+  ui.slider.oninput = () => setFrame(v, Number(ui.slider.value));
   const resize = () => {
     const w = root.clientWidth || 800, h = root.clientHeight || 600;
     renderer.setSize(w, h, false);
@@ -368,6 +547,15 @@ function makeViewer(root, lib) {
   resize();
   const loop = () => {
     if (!v.alive) return;
+    if (v.playing && v.anim) {
+      const now = performance.now();
+      const step = v.anim.frame_ms / Number(ui.speed.value || 1);
+      const n = Math.floor((now - v.lastTick) / step);
+      if (n > 0) {
+        v.lastTick += n * step;
+        setFrame(v, (v.frame + n) % v.anim.labels.length);
+      }
+    }
     controls.update();
     const dist = camera.position.distanceTo(controls.target);
     const near = Math.max(0.05, dist / 1500);
@@ -402,6 +590,7 @@ function applyMaterials(v) {
     mesh.visible = !v.hidden.has(mesh.userData.name);
   });
   v.groups.items.children.forEach((obj) => { obj.visible = !v.hidden.has(obj.userData.name); });
+  v.groups.anim.children.forEach((obj) => { obj.visible = !v.hidden.has(obj.userData.name); });
 }
 
 function fit(v) {
@@ -424,6 +613,7 @@ function legend(v, data) {
   const seen = new Map();
   for (const m of data.meshes) if (!seen.has(m.name)) seen.set(m.name, m.color);
   for (const it of data.items) if (it.name && !seen.has(it.name)) seen.set(it.name, it.color);
+  for (const t of (data.animation ? data.animation.tracks : [])) if (!seen.has(t.name)) seen.set(t.name, t.color);
   box.replaceChildren();
   for (const [name, c] of seen) {
     const label = document.createElement("label");
@@ -506,6 +696,138 @@ function updateItems(v, data) {
   if (!v.fitted && !data.meshes.length) fit(v);
 }
 
+function animBlob(base, urls, floats) {
+  // One array from the parts a big track was split into (static files are
+  // capped at 200 MB), in order.
+  const key = urls.join("|");
+  if (!animCache.has(key)) {
+    animCache.set(key, Promise.all(urls.map((url) => {
+      const href = new URL(base + url, window.location.origin).href;
+      return fetch(href).then((r) => {
+        if (!r.ok) throw new Error(`${r.status} ${url}`);
+        return r.arrayBuffer();
+      });
+    })).then((bufs) => {
+      if (bufs.length === 1) return new Float32Array(bufs[0], 0, floats);
+      const out = new Float32Array(floats);
+      let at = 0;
+      for (const buf of bufs) {
+        const part = new Float32Array(buf);
+        out.set(part.subarray(0, Math.min(part.length, floats - at)), at);
+        at += part.length;
+      }
+      return out;
+    }));
+  }
+  return animCache.get(key);
+}
+
+const _m = { mat: null, pos: null, quat: null, scale: null, axis: null };
+
+function setInstances(v, t, obj, f) {
+  const { THREE } = v.lib;
+  if (!_m.mat) {
+    _m.mat = new THREE.Matrix4(); _m.pos = new THREE.Vector3(); _m.quat = new THREE.Quaternion();
+    _m.scale = new THREE.Vector3(); _m.axis = new THREE.Vector3(0, 0, 1);
+  }
+  const rows = t.rows;
+  const i0 = t.offsets[f], i1 = t.offsets[f + 1];
+  let n = 0;
+  for (let i = i0; i < i1; i++) {
+    const r = 7 * i;
+    if (!Number.isFinite(rows[r]) || !Number.isFinite(rows[r + 2])) continue;
+    _m.pos.set(rows[r], rows[r + 1], rows[r + 2]);
+    _m.quat.setFromAxisAngle(_m.axis, rows[r + 3]);
+    _m.scale.set(rows[r + 4], rows[r + 5], rows[r + 6]);
+    _m.mat.compose(_m.pos, _m.quat, _m.scale);
+    obj.setMatrixAt(n++, _m.mat);
+  }
+  obj.count = n;
+  obj.instanceMatrix.needsUpdate = true;
+}
+
+function setFrame(v, f) {
+  const a = v.anim;
+  if (!a) return;
+  f = Math.max(0, Math.min(f, a.labels.length - 1));
+  v.frame = f;
+  v.ui.slider.value = String(f);
+  v.ui.time.textContent = a.labels[f] || "";
+  a.tracks.forEach((t, k) => {
+    const obj = a.objs[k];
+    if (t.kind === "instances") { setInstances(v, t, obj, f); return; }
+    const attr = obj.geometry.getAttribute("position");
+    const out = attr.array;
+    const p0 = t.offsets[f], p1 = t.offsets[f + 1];
+    let n = 0;
+    const ok = (p) => Number.isFinite(a.arr[3 * p]) && Number.isFinite(a.arr[3 * p + 1]) && Number.isFinite(a.arr[3 * p + 2]);
+    const put = (p) => { out[3 * n] = a.arr[3 * p]; out[3 * n + 1] = a.arr[3 * p + 1]; out[3 * n + 2] = a.arr[3 * p + 2]; n++; };
+    if (t.kind === "line") {
+      for (let p = p0 + 1; p < p1; p++) if (ok(p - 1) && ok(p)) { put(p - 1); put(p); }
+    } else {
+      for (let p = p0; p < p1; p++) if (ok(p)) put(p);
+    }
+    attr.needsUpdate = true;
+    obj.geometry.setDrawRange(0, n);
+    const c = t.frame_colors && t.frame_colors[f];
+    if (c) obj.material.color.setRGB(c[0], c[1], c[2]);
+  });
+}
+
+async function updateAnimation(v, data) {
+  const { THREE } = v.lib;
+  const a = data.animation;
+  const key = a ? a.urls.join("|") + "#" + a.tracks.map((t) => (t.urls || []).join("|")).join(";") : "";
+  if (key === v.animKey) return;
+  v.animKey = key;
+  v.groups.anim.children.slice().forEach((o) => { o.geometry.dispose(); o.material.dispose(); v.groups.anim.remove(o); });
+  v.anim = null;
+  v.ui.box.style.display = a ? "" : "none";
+  if (!a) return;
+  const arr = await animBlob(data.base, a.urls, a.points * 3);
+  const rowsets = await Promise.all(a.tracks.map((t) => t.kind === "instances" ? animBlob(data.base, t.urls, t.count * 7) : null));
+  if (key !== v.animKey) return;
+  a.tracks.forEach((t, k) => { if (rowsets[k]) t.rows = rowsets[k]; });
+  const objs = a.tracks.map((t) => {
+    if (t.kind === "instances") {
+      let most = 1;
+      for (let f = 0; f + 1 < t.offsets.length; f++) most = Math.max(most, t.offsets[f + 1] - t.offsets[f]);
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.Float32BufferAttribute(t.vertices, 3));
+      g.setIndex(t.faces);
+      g.computeVertexNormals();
+      const mesh = new THREE.InstancedMesh(g, new THREE.MeshPhongMaterial({
+        color: new THREE.Color(...t.color), flatShading: true, side: THREE.DoubleSide, shininess: 30 }), most);
+      mesh.count = 0;
+      mesh.frustumCulled = false;
+      mesh.userData = { name: t.name };
+      v.groups.anim.add(mesh);
+      return mesh;
+    }
+    let most = 0;
+    for (let f = 0; f + 1 < t.offsets.length; f++) most = Math.max(most, t.offsets[f + 1] - t.offsets[f]);
+    const size = Math.max(1, t.kind === "line" ? 2 * most : most);
+    const g = new THREE.BufferGeometry();
+    const attr = new THREE.BufferAttribute(new Float32Array(size * 3), 3);
+    attr.setUsage(THREE.DynamicDrawUsage);
+    g.setAttribute("position", attr);
+    g.setDrawRange(0, 0);
+    const see = t.opacity < 1;
+    const obj = t.kind === "line"
+      ? new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: new THREE.Color(...t.color), transparent: see, opacity: t.opacity }))
+      : new THREE.Points(g, new THREE.PointsMaterial({ color: new THREE.Color(...t.color), size: Math.max(t.size, 4),
+                                                       sizeAttenuation: false, transparent: see, opacity: t.opacity }));
+    obj.frustumCulled = false;  // the bounding sphere is of the empty buffer
+    obj.userData = { name: t.name };
+    v.groups.anim.add(obj);
+    return obj;
+  });
+  v.anim = { ...a, arr, objs };
+  v.ui.slider.max = String(a.labels.length - 1);
+  setFrame(v, Math.min(v.frame, a.labels.length - 1));
+  applyMaterials(v);
+}
+
 export default function (component) {
   const { data, parentElement } = component;
   const root = parentElement.querySelector(".sf3d");
@@ -519,6 +841,7 @@ export default function (component) {
     }
     legend(v, data);
     updateItems(v, data);
+    updateAnimation(v, data).catch((e) => { root.querySelector(".sf3d-status").textContent = String(e); });
     updateMeshes(v, data).catch((e) => { root.querySelector(".sf3d-status").textContent = String(e); });
   }).catch((e) => { root.querySelector(".sf3d-status").textContent = `three.js: ${e}`; });
   // Called before every update as well as on unmount: only an element that
@@ -535,7 +858,16 @@ export default function (component) {
 }
 """
 
-_COMPONENT = component("streamflex_scene_three", html=_HTML, css=_CSS, js=_JS)
+# The code's hash is part of the name: a component is registered once per
+# name, so a server that reloads this module after an edit would otherwise
+# keep running the old JS against the new manifest (a new track kind the
+# old viewer silently does not draw -- the 3D bodies were simply missing).
+_COMPONENT = component(
+    "streamflex_scene_three_" + hashlib.sha1((_HTML + _CSS + _JS).encode()).hexdigest()[:10],
+    html=_HTML,
+    css=_CSS,
+    js=_JS,
+)
 
 
 def three_chart(fig, *, key: str, height: int = 750) -> None:
