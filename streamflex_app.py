@@ -9,7 +9,7 @@ from loguru import logger
 
 from data_manager import DataManager
 from plugin_manager import PluginManager
-from session_guard import install_session_guards
+from session_guard import detached_runs, install_session_guards
 from state_manager import AUTOSAVE_NAME, StateManager
 from utils import (
     STORAGE_ROOTS,
@@ -159,7 +159,9 @@ def clear_cache_dirs(
         """Delete the plain files directly inside ``directory``.
 
         ``keep`` filters by ``cache_result``'s ``Category^hash.ext`` naming;
-        None deletes everything. Returns how many files went.
+        None deletes everything. Returns how many files went. A
+        ``Category^hash.parts`` directory -- the resumable blocks of a
+        ray-tracing entry that never finished -- goes with its category.
         """
         if not os.path.exists(directory):
             return 0
@@ -171,6 +173,9 @@ def clear_cache_dirs(
             try:
                 if os.path.isfile(file_path):
                     os.unlink(file_path)
+                    deleted += 1
+                elif filename.endswith(".parts") and os.path.isdir(file_path):
+                    shutil.rmtree(file_path)
                     deleted += 1
             except Exception as e:
                 logger.error(f"Failed to delete {file_path}: {e}")
@@ -790,6 +795,45 @@ def autosave_ui(state_mgr, data_mgr, widget_mgr):
             st.rerun()
 
 
+def _wait_for_detached_run():
+    """Hold the plugins back while another tab's run is still going.
+
+    A fresh page load gets a new session while the old one keeps running
+    detached (`session_guard`). This one then restores the autosave, finds
+    Generate set and would start the same work again beside it -- the same
+    scene in more solver processes, racing it for the card. So it waits;
+    the detached run writes its results to the cache and output folders,
+    and once it has finished a rerun here picks them up.
+    """
+    from streamlit.runtime.scriptrunner import get_script_run_ctx
+
+    ctx = get_script_run_ctx()
+    others = detached_runs(exclude=ctx.session_id if ctx else None)
+    if not others or st.session_state.get("_run_beside_detached"):
+        return False
+    since = datetime.fromtimestamp(min(run["since"] for run in others))
+    st.warning(
+        f"A run from a closed tab is still going (detached since "
+        f"{since:%H:%M:%S}). Plugins are not run here until it finishes -- "
+        "it writes its results to the cache, and a rerun after that "
+        "picks them up instead of tracing again.",
+        icon=":material/hourglass_top:",
+    )
+    left, right = st.columns(2)
+    left.button(
+        "Check again", icon=":material/refresh:", key="detached_run_check"
+    )
+    if right.button(
+        "Run plugins here anyway",
+        icon=":material/play_arrow:",
+        key="detached_run_override",
+        help="Starts this tab's plugin chain next to the detached run.",
+    ):
+        st.session_state["_run_beside_detached"] = True
+        st.rerun()
+    return True
+
+
 def global_trigger_onclick():
     st.session_state["global_trigger"] = True
 
@@ -946,7 +990,7 @@ def main():
 
     # Plugin Execution
     try:
-        if selected_plugins:
+        if selected_plugins and not _wait_for_detached_run():
             st.subheader("🚀 Active Plugins")
             for plugin_name in selected_plugins:
                 with st.container():
@@ -1004,7 +1048,7 @@ def main():
                                 " (worker pool shut down)" if pool else "",
                             )
             toc.generate()
-        else:
+        elif not selected_plugins:
             st.info(
                 "ℹ️ No plugins selected. Choose plugins from the dropdown above."
             )

@@ -19,13 +19,28 @@ how long it can be reattached to), its file watchers still stop, its
 session-scoped caches are still cleared — this app declares none, all its
 caches are global.
 
-What the guard does *not* do is bring the browser back to the run. A fresh
-page load has no way to ask for the old session: the reconnect id travels in
-the third entry of ``Sec-WebSocket-Protocol`` and the frontend keeps it in
-page memory only (there is no ``localStorage`` entry for it anywhere in the
-bundle), so a reload always gets a new session. The run finishes and writes
-its artifacts to disk; the session state it leaves behind is recovered from
-the autosave snapshot (``StateManager.restore_autosave``), not from here.
+A page that still has the old session in memory *does* come back to it: the
+reconnect id travels in the third entry of ``Sec-WebSocket-Protocol``, and a
+tab whose page survived (a browser restored with its tabs, a laptop that
+woke up, a dropped network) reattaches to the session it had. The first
+thing such a client sends is a ``rerun_script``, and with
+``runner.fastReruns`` (on by default) a rerun does not wait for the running
+script: it stops it on the spot and starts over -- through
+``ScriptRunner.request_stop``, not ``AppSession.request_script_stop``, so the
+disconnect guard never sees it. On 2026-10-23 that killed a ray-tracing run
+25 minutes in, and because the Generate trigger was still set the new run
+started the same trace from zero. So the rerun a reattached client sends
+while the script is running is held back and replayed once the script has
+finished: the browser gets its full page then, and the run gets to end.
+Only that one rerun is held -- anything the user clicks afterwards
+interrupts the run as it always does.
+
+A fresh page load cannot ask for the old session (the frontend keeps the
+id in page memory only) and gets a new one. The run finishes and writes its
+artifacts to disk; the session state it leaves behind is recovered from the
+autosave snapshot (``StateManager.restore_autosave``), not from here.
+:func:`detached_runs` tells the new session that a run is still going, so
+the main page can keep it from starting a second copy of the same work.
 
 Cost while detached: the run keeps rendering into the session's
 ``ForwardMsgQueue`` with no client to flush it. That is bounded by one full
@@ -34,6 +49,7 @@ at the start of every script run — not by how long the run lasts.
 """
 
 import threading
+import time
 from typing import TYPE_CHECKING
 
 from loguru import logger
@@ -43,6 +59,18 @@ if TYPE_CHECKING:
 
 _INSTALLED_ATTR = "_streamflex_session_guard"
 _KEEP_RUNNING_ATTR = "_streamflex_keep_running"
+#: Set on a session a client reattached to while its script was running:
+#: the next rerun request is the reconnect's own, and is held back.
+_HOLD_RERUN_ATTR = "_streamflex_hold_rerun"
+#: The held rerun's client state (``None`` stands for "previous state"),
+#: replayed when the script ends. A list so "nothing held" and "held with
+#: no client state" stay distinguishable.
+_HELD_RERUN_ATTR = "_streamflex_held_rerun"
+
+#: Sessions whose script was running when their client went away, with the
+#: time it went, until they are reattached or the script ends.
+_DETACHED: dict[str, tuple["AppSession", float]] = {}
+_DETACHED_LOCK = threading.Lock()
 
 #: Detached sessions whose script was still running when the session storage
 #: let go of them, kept alive here until the script ends.
@@ -56,6 +84,26 @@ def _is_running(session) -> bool:
     from streamlit.runtime.app_session import AppSessionState
 
     return getattr(session, "_state", None) == AppSessionState.APP_IS_RUNNING
+
+
+def detached_runs(exclude: str | None = None) -> list[dict]:
+    """Scripts still running for a client that has gone away.
+
+    ``[{"session_id", "since"}]`` (``since`` is a ``time.time()``),
+    excluding the session ``exclude`` -- the caller's own. A fresh page
+    load gets a new session while the old one keeps running detached;
+    without this the new one restores the autosave, finds Generate set and
+    starts the same work again next to it.
+    """
+    with _DETACHED_LOCK:
+        for session_id, (session, _since) in list(_DETACHED.items()):
+            if not _is_running(session):
+                del _DETACHED[session_id]
+        return [
+            {"session_id": session_id, "since": since}
+            for session_id, (_session, since) in _DETACHED.items()
+            if session_id != exclude
+        ]
 
 
 def _release_finished_sessions() -> int:
@@ -109,6 +157,7 @@ def install_session_guards() -> None:
     ``streamflex_app.py`` calls it again in case the module is run directly.
     """
     from streamlit.runtime.app_session import AppSession, AppSessionState
+    from streamlit.runtime.scriptrunner import ScriptRunnerEvent
     from streamlit.runtime.websocket_session_manager import (
         WebsocketSessionManager,
     )
@@ -145,6 +194,8 @@ def install_session_guards() -> None:
         )
         if running:
             setattr(session, _KEEP_RUNNING_ATTR, True)
+            with _DETACHED_LOCK:
+                _DETACHED[session_id] = (session, time.time())
         try:
             return original_disconnect_session(self, session_id)
         finally:
@@ -152,6 +203,67 @@ def install_session_guards() -> None:
                 setattr(session, _KEEP_RUNNING_ATTR, False)
 
     WebsocketSessionManager.disconnect_session = disconnect_session
+
+    original_connect_session = WebsocketSessionManager.connect_session
+
+    def connect_session(self, *args, **kwargs):
+        session_id = original_connect_session(self, *args, **kwargs)
+        with _DETACHED_LOCK:
+            detached = _DETACHED.pop(session_id, None)
+        session_info = self._active_session_info_by_id.get(session_id)
+        session = getattr(session_info, "session", None)
+        if detached is not None and session is not None and _is_running(session):
+            setattr(session, _HOLD_RERUN_ATTR, True)
+            logger.bind(class_name="streamlit").warning(
+                "session {} reattached mid-run: its client's rerun waits for "
+                "the script to finish",
+                session_id,
+            )
+        return session_id
+
+    WebsocketSessionManager.connect_session = connect_session
+
+    original_request_rerun = AppSession.request_rerun
+
+    def request_rerun(self, client_state):
+        if getattr(self, _HOLD_RERUN_ATTR, False):
+            setattr(self, _HOLD_RERUN_ATTR, False)
+            if _is_running(self):
+                setattr(self, _HELD_RERUN_ATTR, [client_state])
+                logger.bind(class_name="streamlit").warning(
+                    "session {}: rerun from the reattached client held until "
+                    "the running script finishes",
+                    getattr(self, "id", "?"),
+                )
+                return None
+        return original_request_rerun(self, client_state)
+
+    AppSession.request_rerun = request_rerun
+
+    original_handle_event = AppSession._handle_scriptrunner_event_on_event_loop
+
+    def _handle_scriptrunner_event_on_event_loop(self, sender, event, *args, **kwargs):
+        # Read before the original handles it: SHUTDOWN clears the runner.
+        current = sender is not None and sender is getattr(self, "_scriptrunner", None)
+        result = original_handle_event(self, sender, event, *args, **kwargs)
+        # SHUTDOWN of the current runner is its thread ending -- after the
+        # script's own stop event, once nothing of the old run can still
+        # interleave. A stale runner's SHUTDOWN says nothing about the run.
+        if event == ScriptRunnerEvent.SHUTDOWN and current:
+            held = getattr(self, _HELD_RERUN_ATTR, None)
+            if held is not None:
+                setattr(self, _HELD_RERUN_ATTR, None)
+                if self._state != AppSessionState.SHUTDOWN_REQUESTED:
+                    logger.bind(class_name="streamlit").info(
+                        "session {}: script finished, replaying the held rerun",
+                        getattr(self, "id", "?"),
+                    )
+                    original_request_rerun(self, held[0])
+        return result
+
+    AppSession._handle_scriptrunner_event_on_event_loop = (
+        _handle_scriptrunner_event_on_event_loop
+    )
 
     # The disconnect is only the first way a detached run dies. The session
     # then sits in the session storage for `disconnectedSessionTTL`; once
