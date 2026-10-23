@@ -76,6 +76,25 @@ def load_scene_cached(scene_path: str, merge_shapes: bool = True):
 _SCENE_LOAD_LOCK = threading.Lock()
 
 
+def release_scene_memory() -> int:
+    """Drop every loaded scene and hand its VRAM back to the driver.
+
+    A loaded scene keeps its geometry and OptiX acceleration structure on
+    the card for as long as ``load_scene_cached`` holds it, and the
+    in-process radio maps and ray casts leave Dr.Jit's cache behind; a page
+    that is left calls this so the next one starts from a clean card. The
+    next load of a scene is a fresh read (a second or two for an LOD3
+    city). Returns the bytes handed back.
+    """
+    import gc
+
+    from utils.gpu import release_gpu_memory
+
+    load_scene_cached.clear()
+    gc.collect()
+    return release_gpu_memory()
+
+
 def scene_file_path(scene_name) -> str | None:
     """The XML a scene name stands for: a path as given, or a Sionna scene."""
     name = str(scene_name or "")

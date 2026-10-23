@@ -15,52 +15,126 @@ from loguru import logger
 from utils.memory import cgroup_oom_kills, solver_memory_headroom
 
 
+def _cuda_driver():
+    """The CUDA driver API through ctypes, or None (no driver, no GPU)."""
+    try:
+        import ctypes
+
+        cuda = ctypes.CDLL("libcuda.so.1")
+        if cuda.cuInit(0) != 0:
+            return None
+        return cuda
+    except OSError:
+        return None
+
+
+def _cuda_devices(cuda) -> list[int]:
+    """Devices this process already has a CUDA context on.
+
+    Retaining a primary context that is not active would *create* one
+    (~300 MiB) just to measure it, so only active ones are touched.
+    """
+    import ctypes
+
+    count = ctypes.c_int(0)
+    if cuda.cuDeviceGetCount(ctypes.byref(count)) != 0:
+        return []
+    active = []
+    for device in range(count.value):
+        flags, state = ctypes.c_uint(0), ctypes.c_int(0)
+        if cuda.cuDevicePrimaryCtxGetState(device, ctypes.byref(flags), ctypes.byref(state)) == 0 and state.value:
+            active.append(device)
+    return active
+
+
+def _device_free_bytes(cuda, devices: list[int]) -> int:
+    """Free VRAM summed over ``devices`` (device-wide, all processes)."""
+    import ctypes
+
+    total_free = 0
+    for device in devices:
+        ctx = ctypes.c_void_p()
+        if cuda.cuDevicePrimaryCtxRetain(ctypes.byref(ctx), device) != 0:
+            continue
+        try:
+            if cuda.cuCtxPushCurrent_v2(ctx) != 0:
+                continue
+            free, total = ctypes.c_size_t(0), ctypes.c_size_t(0)
+            if cuda.cuMemGetInfo_v2(ctypes.byref(free), ctypes.byref(total)) == 0:
+                total_free += int(free.value)
+            cuda.cuCtxPopCurrent_v2(ctypes.byref(ctypes.c_void_p()))
+        finally:
+            cuda.cuDevicePrimaryCtxRelease_v2(device)
+    return total_free
+
+
+def _trim_cuda_pools(cuda, devices: list[int]) -> None:
+    """Hand every unused byte of the stream-ordered pools to the driver.
+
+    Dr.Jit allocates with ``cuMemAllocAsync``: ``flush_malloc_cache`` frees
+    its cache into the device's memory pool, and the pool keeps the pages
+    (release threshold 0 only applies at a synchronisation the pool sees).
+    """
+    import ctypes
+
+    for device in devices:
+        for getter in (cuda.cuDeviceGetMemPool, cuda.cuDeviceGetDefaultMemPool):
+            pool = ctypes.c_void_p()
+            if getter(ctypes.byref(pool), device) == 0 and pool.value:
+                cuda.cuMemPoolTrimTo(pool, ctypes.c_size_t(0))
+
+
 def release_gpu_memory():
     """Return this process' cached VRAM to the driver.
 
     Two caching allocators are in play and freeing one does nothing for the
     other: torch's, which the heavy plugins allocate through, and Dr.Jit's,
-    which Sionna RT allocates through.
+    which Sionna RT (and the Position Selector's in-process radio maps and
+    ray casts) allocate through.
 
-    Only the torch half actually comes back. ``dr.flush_malloc_cache()`` is
-    the documented API and is called here, but measured on Dr.Jit 1.3.1 +
-    CUDA it returns nothing to the driver: allocate and free three buffers
-    and the process still holds every byte, so a finished ray-tracing run
-    stays resident for the life of the Streamlit process (7.1 GiB of a
-    24 GiB card, on the 2026-09-07 trajectory run). Keep the call — it is
-    correct, cheap, and covers host-pinned blocks and future versions — but
-    do not count on it for VRAM. The way to not lose the card to Sionna RT
-    is to allocate less of it in the first place.
+    ``dr.flush_malloc_cache()`` alone looked like a no-op: Dr.Jit (1.5)
+    frees its cache with ``cuMemFreeAsync``, into the device's
+    stream-ordered pool, and the pool keeps every page. Measured: 1 GiB
+    freed by the flush, 0 back; after ``dr.sync_thread()`` and
+    ``cuMemPoolTrimTo(pool, 0)`` the process is down to its bare context
+    (386 MiB). Memory still referenced -- a loaded scene's geometry and
+    acceleration structure -- stays; dropping that is the caller's business
+    (``utils.release_scene_memory``).
 
     Every call is best-effort: a CPU-only box, a driver that is already
     gone, or a Dr.Jit built without the CUDA backend must not take a plugin
-    run down on the way out. Returns the bytes handed back, or 0 when there
-    is no GPU to ask.
+    run down on the way out. Torch and Dr.Jit are only touched when already
+    imported, and only CUDA contexts that exist are asked, so the call never
+    creates one. Returns the bytes handed back (device-wide free memory
+    before vs after), or 0 when there is no GPU to ask.
     """
-    try:
-        import torch
+    import sys
 
-        if not torch.cuda.is_available():
-            return 0
-        before, _total = torch.cuda.mem_get_info()
-    except Exception:
+    cuda = _cuda_driver()
+    devices = _cuda_devices(cuda) if cuda is not None else []
+    if not devices:
         return 0
+    before = _device_free_bytes(cuda, devices)
+    torch = sys.modules.get("torch")
+    if torch is not None:
+        try:
+            if torch.cuda.is_initialized():
+                torch.cuda.empty_cache()
+                torch.cuda.ipc_collect()
+        except Exception:
+            pass
+    dr = sys.modules.get("drjit")
+    if dr is not None:
+        try:
+            dr.flush_malloc_cache()
+            dr.sync_thread()
+        except Exception:
+            pass
     try:
-        torch.cuda.empty_cache()
-        torch.cuda.ipc_collect()
+        _trim_cuda_pools(cuda, devices)
     except Exception:
         pass
-    try:
-        import drjit as dr
-
-        dr.flush_malloc_cache()
-    except Exception:
-        pass
-    try:
-        after, _total = torch.cuda.mem_get_info()
-        return max(0, int(after) - int(before))
-    except Exception:
-        return 0
+    return max(0, _device_free_bytes(cuda, devices) - before)
 
 
 def release_worker_pool():

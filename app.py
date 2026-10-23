@@ -7,6 +7,7 @@ from session_guard import install_session_guards
 from utils import (
     configure_joblib_temp_folder,
     logger,
+    release_scene_memory,
     sweep_orphaned_joblib_folders,
 )
 
@@ -157,6 +158,14 @@ final_pages = {category: pgs for category, pgs in pages.items() if pgs}
 # Create and run the navigation
 if final_pages:
     pg = st.navigation(final_pages, position="top")
+    # Leaving a page drops the scenes it loaded and hands their VRAM back:
+    # the Position Selector traces radio maps and ray casts in this process,
+    # and Dr.Jit keeps every byte it ever used until asked (20 GB measured).
+    _previous_page = st.session_state.get("_active_page")
+    if _previous_page is not None and _previous_page != pg.url_path:
+        _freed = release_scene_memory()
+        logger.info(f"Left page '{_previous_page}': {_freed / 2**30:.1f} GiB VRAM released")
+    st.session_state["_active_page"] = pg.url_path
     pg.run()
 else:
     st.warning("No pages were found or configured.")
