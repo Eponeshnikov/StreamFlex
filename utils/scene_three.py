@@ -19,9 +19,17 @@ three.js itself is vendored in ``static/three/`` (no CDN).
 
 from __future__ import annotations
 
+import base64
+import contextlib
+import contextvars
+import gzip
 import hashlib
+import html
+import json
 import os
 import re
+import shutil
+import tempfile
 import time
 from typing import Any
 
@@ -67,6 +75,30 @@ def renderer_control(key: str, container=None, help: str | None = None) -> str:
         ),
     )
     return value or DEFAULT_RENDERER
+
+
+def on_page_control(key: str, container=None, *, value: bool = True, on_change=None) -> bool:
+    """Draw the 3D view on this page, or only offer it as a download.
+
+    Off, no mesh crosses the websocket and the browser renders nothing: the
+    layers, renderer and the rest stay settable and the download button
+    builds the file on click -- set the view up on a weak machine, open the
+    file on a strong one.
+    """
+    host = container if container is not None else st
+    return bool(
+        host.toggle(
+            "Draw 3D on this page",
+            value=value,
+            key=key,
+            on_change=on_change,
+            help=(
+                "Off: the 3D view is not rendered here (nothing heavy reaches this "
+                "browser); its settings still apply and ⬇ Download builds the HTML "
+                "file on click, to open on a stronger computer."
+            ),
+        )
+    )
 
 
 def three_ready() -> str | None:
@@ -131,29 +163,57 @@ def _fingerprint(*arrays) -> str:
     return h.hexdigest()[:24]
 
 
+#: Where the binaries go: static serving's folder, or a private one while a
+#: download is being packed (`standalone_html`) -- a file of a long crowd
+#: walk would otherwise push ``static/`` past Streamlit's 1 GB limit.
+_BLOB_DIR: contextvars.ContextVar[str | None] = contextvars.ContextVar("sf3d_blob_dir", default=None)
+
+
+def _blob_path(url: str) -> str:
+    return os.path.join(_BLOB_DIR.get() or SCENE3D_DIR, url.removeprefix("scene3d/"))
+
+
+@contextlib.contextmanager
+def _private_blobs():
+    """Binaries written inside go to a temporary folder, removed after."""
+    from utils.storage import resolve_scratch_root, tmp_dir_for
+
+    root = tmp_dir_for(resolve_scratch_root())
+    os.makedirs(root, exist_ok=True)
+    folder = tempfile.mkdtemp(prefix="scene3d_", dir=root)
+    token = _BLOB_DIR.set(folder)
+    try:
+        yield folder
+    finally:
+        _BLOB_DIR.reset(token)
+        shutil.rmtree(folder, ignore_errors=True)
+
+
 def _write_blob(name: str, parts: list[np.ndarray]) -> None:
-    path = os.path.join(SCENE3D_DIR, name)
+    folder = _BLOB_DIR.get() or SCENE3D_DIR
+    path = os.path.join(folder, name)
     if os.path.exists(path):
         os.utime(path)  # recently used: pruned last
         return
-    os.makedirs(SCENE3D_DIR, exist_ok=True)
+    os.makedirs(folder, exist_ok=True)
     tmp = f"{path}.{os.getpid()}.tmp"
     with open(tmp, "wb") as fh:
         fh.writelines(np.ascontiguousarray(p).tobytes() for p in parts)
     os.replace(tmp, path)
-    _prune()
+    if folder == SCENE3D_DIR:
+        _prune()
 
 
-def _write_rows(prefix: str, rows: np.ndarray, *identity) -> list[str]:
-    """Float32 rows as one or more files, each under ``MAX_BLOB_BYTES``.
+def _write_rows(prefix: str, rows: np.ndarray, *identity, dtype: type[np.generic] = np.float32) -> list[str]:
+    """Rows (float32 unless ``dtype``) as one or more files, each under ``MAX_BLOB_BYTES``.
 
     Streamlit serves nothing over 200 MB: 7 200 walking people over 1 500
     frames were 302 MB in one file and came back 404. Split on row
     boundaries; the viewer fetches the parts and joins them in order.
     """
-    rows = np.ascontiguousarray(rows, dtype=np.float32)
+    rows = np.ascontiguousarray(rows, dtype=dtype)
     width = int(np.prod(rows.shape[1:])) if rows.ndim > 1 else 1
-    per_file = max(1, MAX_BLOB_BYTES // max(4 * width, 1))
+    per_file = max(1, MAX_BLOB_BYTES // max(rows.itemsize * width, 1))
     key = _fingerprint(rows, *identity)
     urls = []
     for part, lo in enumerate(range(0, max(len(rows), 1), per_file)):
@@ -343,6 +403,46 @@ def _instance_track(base, ti: int, per_frame: list[dict]) -> dict[str, Any] | No
     }
 
 
+def _body_tracks(fig, n_frames: int) -> list[dict[str, Any]]:
+    """Compact moving bodies a figure carries beside its frames (``fig._sf3d_bodies``).
+
+    Each entry: ``name``, ``color``, ``template`` (``vertices``, ``faces``)
+    and ``bodies`` -- an object with ``q`` (frames, n, 4) int16 = x, y,
+    z_ground, heading quantised (x == -32768: not on the map), ``origin``,
+    ``unit_xy``, ``unit_z`` and ``scale`` (n, 3), like
+    ``pages.position_selector.playback.Bodies``. Written as frame-to-frame
+    differences (int16, wrapping): bodies move centimetres per frame, so a
+    download's gzip makes a 7k crowd over 12000 frames ~40 MB instead of
+    the 2.6 GB of float32 pose rows. The viewer adds them back up once.
+    """
+    out = []
+    for entry in getattr(fig, "_sf3d_bodies", None) or ():
+        b = entry["bodies"]
+        q = np.ascontiguousarray(b.q, dtype=np.int16)
+        if q.shape[0] != n_frames:
+            raise ValueError(f"{entry['name']}: {q.shape[0]} frames of bodies for {n_frames} frames")
+        delta = q.copy()
+        np.subtract(q[1:], q[:-1], out=delta[1:])  # int16: wraps, and so does the sum back
+        urls = _write_rows("bodies", delta.reshape(len(q), -1), np.asarray(b.origin), dtype=np.int16)
+        template = entry["template"]
+        out.append(
+            {
+                "kind": "bodies",
+                "name": str(entry["name"]),
+                "color": list(_rgb(entry.get("color"))),
+                "opacity": float(entry.get("opacity", 1.0)),
+                "urls": urls,
+                "n": int(q.shape[1]),
+                "origin": [float(v) for v in b.origin],
+                "unit": [float(b.unit_xy), float(b.unit_z)],
+                "scale": np.round(np.asarray(b.scale, np.float64), 4).reshape(-1).tolist(),
+                "vertices": [float(v) for v in template.get("vertices", [])],
+                "faces": [int(v) for v in template.get("faces", [])],
+            }
+        )
+    return out
+
+
 def _frame_labels(fig) -> list[str]:
     sliders = fig.layout.sliders or ()
     steps = sliders[0].steps if sliders else ()
@@ -406,6 +506,7 @@ def _animation(fig) -> tuple[dict[str, Any] | None, set[int]]:
     blob = np.concatenate(parts) if parts else np.zeros((0, 3), np.float32)
     urls = _write_rows("anim", blob, np.asarray([t["offsets"] for t in tracks]))
     meta = fig.layout.meta if isinstance(fig.layout.meta, dict) else {}
+    tracks += _body_tracks(fig, len(frames))
     return {
         "urls": urls,
         "points": len(blob),
@@ -493,7 +594,17 @@ const animCache = new Map();       // url -> Promise<Float32Array>
 const viewers = new WeakMap();     // parentElement -> viewer
 let threePromise = null;
 
+// A page saved by ``standalone_html`` brings three.js and the binaries
+// along (no server to fetch them from) and sets this before mounting.
+const standalone = () => globalThis.sf3dStandalone;
+
+function getBlob(base, url) {
+  const own = standalone();
+  return own ? own.fetch(url) : fetch(new URL(base + url, window.location.origin).href);
+}
+
 function loadThree(base) {
+  if (!threePromise && standalone()) threePromise = standalone().lib;
   if (!threePromise) {
     const abs = (p) => new URL(base + p, window.location.origin).href;
     threePromise = Promise.all([import(abs("three/three.module.js")), import(abs("three/OrbitControls.js"))])
@@ -504,8 +615,7 @@ function loadThree(base) {
 
 function geometry(THREE, base, m) {
   if (!geometryCache.has(m.url)) {
-    const url = new URL(base + m.url, window.location.origin).href;
-    geometryCache.set(m.url, fetch(url).then((r) => {
+    geometryCache.set(m.url, getBlob(base, m.url).then((r) => {
       if (!r.ok) throw new Error(`${r.status} ${m.url}`);
       return r.arrayBuffer();
     }).then((buf) => {
@@ -723,30 +833,64 @@ function updateItems(v, data) {
   if (!v.fitted && !data.meshes.length) fit(v);
 }
 
-function animBlob(base, urls, floats) {
+function animBlob(base, urls, floats, Type = Float32Array, then = null) {
   // One array from the parts a big track was split into (static files are
-  // capped at 200 MB), in order.
+  // capped at 200 MB), in order; ``then`` runs once on it (cached after).
   const key = urls.join("|");
   if (!animCache.has(key)) {
     animCache.set(key, Promise.all(urls.map((url) => {
-      const href = new URL(base + url, window.location.origin).href;
-      return fetch(href).then((r) => {
+      return getBlob(base, url).then((r) => {
         if (!r.ok) throw new Error(`${r.status} ${url}`);
         return r.arrayBuffer();
       });
     })).then((bufs) => {
-      if (bufs.length === 1) return new Float32Array(bufs[0], 0, floats);
-      const out = new Float32Array(floats);
-      let at = 0;
-      for (const buf of bufs) {
-        const part = new Float32Array(buf);
-        out.set(part.subarray(0, Math.min(part.length, floats - at)), at);
-        at += part.length;
+      let out;
+      if (bufs.length === 1) out = new Type(bufs[0], 0, floats);
+      else {
+        out = new Type(floats);
+        let at = 0;
+        for (const buf of bufs) {
+          const part = new Type(buf);
+          out.set(part.subarray(0, Math.min(part.length, floats - at)), at);
+          at += part.length;
+        }
       }
-      return out;
+      return then ? then(out) : out;
     }));
   }
   return animCache.get(key);
+}
+
+function bodyRows(base, t, frames) {
+  // Frame-to-frame differences, int16, added back up in place (the int16
+  // array wraps exactly as the writer's subtraction did).
+  const stride = 4 * t.n;
+  return animBlob(base, t.urls, frames * stride, Int16Array, (q) => {
+    for (let i = stride; i < q.length; i++) q[i] += q[i - stride];
+    return q;
+  });
+}
+
+function setBodies(v, t, obj, f) {
+  const { THREE } = v.lib;
+  if (!_m.mat) {
+    _m.mat = new THREE.Matrix4(); _m.pos = new THREE.Vector3(); _m.quat = new THREE.Quaternion();
+    _m.scale = new THREE.Vector3(); _m.axis = new THREE.Vector3(0, 0, 1);
+  }
+  const q = t.rows, sc = t.scale, [ox, oy, oz] = t.origin, [uxy, uz] = t.unit, k = Math.PI / 32767;
+  const base = 4 * t.n * f;
+  let n = 0;
+  for (let b = 0; b < t.n; b++) {
+    const r = base + 4 * b;
+    if (q[r] === -32768) continue;
+    _m.pos.set(ox + q[r] * uxy, oy + q[r + 1] * uxy, oz + q[r + 2] * uz);
+    _m.quat.setFromAxisAngle(_m.axis, q[r + 3] * k);
+    _m.scale.set(sc[3 * b], sc[3 * b + 1], sc[3 * b + 2]);
+    _m.mat.compose(_m.pos, _m.quat, _m.scale);
+    obj.setMatrixAt(n++, _m.mat);
+  }
+  obj.count = n;
+  obj.instanceMatrix.needsUpdate = true;
 }
 
 const _m = { mat: null, pos: null, quat: null, scale: null, axis: null };
@@ -783,6 +927,7 @@ function setFrame(v, f) {
   a.tracks.forEach((t, k) => {
     const obj = a.objs[k];
     if (t.kind === "instances") { setInstances(v, t, obj, f); return; }
+    if (t.kind === "bodies") { setBodies(v, t, obj, f); return; }
     const attr = obj.geometry.getAttribute("position");
     const out = attr.array;
     const p0 = t.offsets[f], p1 = t.offsets[f + 1];
@@ -812,13 +957,15 @@ async function updateAnimation(v, data) {
   v.ui.box.style.display = a ? "" : "none";
   if (!a) return;
   const arr = await animBlob(data.base, a.urls, a.points * 3);
-  const rowsets = await Promise.all(a.tracks.map((t) => t.kind === "instances" ? animBlob(data.base, t.urls, t.count * 7) : null));
+  const rowsets = await Promise.all(a.tracks.map((t) => t.kind === "instances" ? animBlob(data.base, t.urls, t.count * 7)
+    : t.kind === "bodies" ? bodyRows(data.base, t, a.labels.length) : null));
   if (key !== v.animKey) return;
   a.tracks.forEach((t, k) => { if (rowsets[k]) t.rows = rowsets[k]; });
   const objs = a.tracks.map((t) => {
-    if (t.kind === "instances") {
+    if (t.kind === "instances" || t.kind === "bodies") {
       let most = 1;
-      for (let f = 0; f + 1 < t.offsets.length; f++) most = Math.max(most, t.offsets[f + 1] - t.offsets[f]);
+      if (t.kind === "bodies") most = Math.max(1, t.n);
+      else for (let f = 0; f + 1 < t.offsets.length; f++) most = Math.max(most, t.offsets[f + 1] - t.offsets[f]);
       const g = new THREE.BufferGeometry();
       g.setAttribute("position", new THREE.Float32BufferAttribute(t.vertices, 3));
       g.setIndex(t.faces);
@@ -904,3 +1051,161 @@ def three_chart(fig, *, key: str, height: int = 750) -> None:
         st.warning(problem)
         return
     _COMPONENT(data=figure_manifest(fig), key=key, height=int(height))
+
+
+# --------------------------------------------------------------------------
+# One HTML file to keep: the same viewer, everything inside it
+# --------------------------------------------------------------------------
+
+_STANDALONE_CSS = """
+:root { --st-background-color: #ffffff; --st-secondary-background-color: #f0f2f6;
+        --st-text-color: #31333f; --st-border-color: #c8c8d0; --st-font: system-ui, sans-serif; }
+@media (prefers-color-scheme: dark) {
+  :root { --st-background-color: #0e1117; --st-secondary-background-color: #262730;
+          --st-text-color: #fafafa; --st-border-color: #555a66; }
+}
+html, body { margin: 0; height: 100%; background: var(--st-background-color); }
+#sf3d-host { height: 100vh; }
+"""
+
+#: Read by the page's loader below; the viewer's own code is unchanged.
+_STANDALONE_LOADER = """
+const text = (id) => new TextDecoder().decode(Uint8Array.from(atob(document.getElementById(id).textContent),
+                                                               (c) => c.charCodeAt(0)));
+const moduleUrl = (src) => URL.createObjectURL(new Blob([src], { type: "text/javascript" }));
+const core = moduleUrl(text("sf3d-three-core"));
+const three = moduleUrl(text("sf3d-three-module").replaceAll("./three.core.js", core));
+const orbit = moduleUrl(text("sf3d-orbit").replaceAll("./three.module.js", three));
+const blobs = JSON.parse(document.getElementById("sf3d-blobs").textContent);
+globalThis.sf3dStandalone = {
+  lib: Promise.all([import(three), import(orbit)])
+    .then(([THREE, controls]) => ({ THREE, OrbitControls: controls.OrbitControls })),
+  fetch: async (url) => {
+    const id = blobs[url];
+    if (!id) return new Response(null, { status: 404 });
+    const packed = await fetch("data:application/octet-stream;base64," + document.getElementById(id).textContent);
+    return new Response(packed.body.pipeThrough(new DecompressionStream("gzip")));
+  },
+};
+"""
+
+
+def _manifest_urls(node) -> list[str]:
+    """Every ``scene3d/...`` file a manifest refers to, in order, once."""
+    out: list[str] = []
+    if isinstance(node, dict):
+        for value in node.values():
+            out += _manifest_urls(value)
+    elif isinstance(node, list | tuple):
+        for value in node:
+            out += _manifest_urls(value)
+    elif isinstance(node, str) and node.startswith("scene3d/"):
+        out.append(node)
+    return list(dict.fromkeys(out))
+
+
+def _b64(data: bytes) -> str:
+    return base64.b64encode(data).decode("ascii")
+
+
+def standalone_html(fig, *, title: str = "Scene") -> bytes:
+    """The figure as one HTML file that plays in any browser, offline.
+
+    The same viewer as ``three_chart``; three.js and every binary mesh and
+    track ride inside the page (gzip + base64, unpacked by the browser's
+    ``DecompressionStream``), so the file opens straight from disk -- no
+    server, no CDN. A full LOD3 city makes a file of a few hundred MB.
+    """
+    blobs, ids = [], {}
+    with _private_blobs():
+        data = figure_manifest(fig)
+        data["base"] = ""
+        for n, url in enumerate(_manifest_urls(data)):
+            with open(_blob_path(url), "rb") as fh:
+                packed = gzip.compress(fh.read(), compresslevel=6, mtime=0)
+            ids[url] = f"sf3d-blob-{n}"
+            blobs.append(f'<script type="application/octet-stream" id="sf3d-blob-{n}">{_b64(packed)}</script>')
+    libs = []
+    for element_id, name in (
+        ("sf3d-three-core", "three.core.js"),
+        ("sf3d-three-module", "three.module.js"),
+        ("sf3d-orbit", "OrbitControls.js"),
+    ):
+        with open(os.path.join(STATIC_DIR, "three", name), "rb") as fh:
+            libs.append(f'<script type="text/plain" id="{element_id}">{_b64(fh.read())}</script>')
+    viewer = _JS.replace("export default function (component)", "const mount = function (component)", 1)
+    # JSON inside <script>: only "</" could end the element early.
+    manifest = json.dumps(data, separators=(",", ":")).replace("</", "<\\/")
+    page = "\n".join(
+        [
+            "<!doctype html>",
+            '<html><head><meta charset="utf-8">',
+            '<meta name="viewport" content="width=device-width, initial-scale=1">',
+            f"<title>{html.escape(title)}</title>",
+            f"<style>{_STANDALONE_CSS}{_CSS}</style>",
+            "</head><body>",
+            f'<div id="sf3d-host">{_HTML}</div>',
+            *libs,
+            f'<script type="application/json" id="sf3d-blobs">{json.dumps(ids)}</script>',
+            *blobs,
+            f'<script type="application/json" id="sf3d-data">{manifest}</script>',
+            '<script type="module">',
+            _STANDALONE_LOADER,
+            viewer,
+            (
+                'mount({ data: JSON.parse(document.getElementById("sf3d-data").textContent),'
+                ' parentElement: document.getElementById("sf3d-host") });'
+            ),
+            "</script>",
+            "</body></html>",
+        ]
+    )
+    return page.encode("utf-8")
+
+
+def plotly_html(fig, *, title: str = "Scene") -> bytes:
+    """A Plotly figure (animation included) as one offline HTML file."""
+    page = fig.to_html(
+        include_plotlyjs=True,
+        full_html=True,
+        auto_play=False,
+        config={"scrollZoom": True, "displaylogo": False, "responsive": True},
+        default_height="95vh",
+    )
+    return page.replace("<head>", f"<head><title>{html.escape(title)}</title>", 1).encode("utf-8")
+
+
+def scene_download(fig, *, renderer: str, key: str, name: str = "scene", container=None) -> None:
+    """A button saving the 3D view as an HTML file to open in a browser later.
+
+    In the renderer it is drawn with: three.js (meshes and tracks packed in,
+    full detail) or Plotly (the figure as drawn). Built only on click.
+    ``fig`` may be a function returning the figure: then the figure itself is
+    built on click too (a view that is not drawn on the page).
+    """
+    three = renderer == "three.js"
+    host = container if container is not None else st
+    stem = re.sub(r"[^\w.-]+", "_", str(name)).strip("_") or "scene"
+    page = standalone_html if three else plotly_html
+
+    def _data() -> bytes:
+        return page(fig() if callable(fig) else fig, title=name)
+
+    host.download_button(
+        f"⬇ Download 3D view ({'three.js' if three else 'Plotly'} HTML)",
+        data=_data,
+        file_name=f"{stem}_{'threejs' if three else 'plotly'}.html",
+        mime="text/html",
+        on_click="ignore",
+        key=key,
+        help=(
+            "One HTML file with everything inside (no server, no internet): open it "
+            "from disk in any browser. "
+            + (
+                "three.js: the full scene and the animation, packed (a LOD3 city is a "
+                "few hundred MB)."
+                if three
+                else "Plotly: the figure as drawn here, animation included."
+            )
+        ),
+    )

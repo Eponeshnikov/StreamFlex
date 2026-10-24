@@ -84,6 +84,7 @@ def file_input(
     *,
     default_dir: str = ...,
     default_source: str = ...,
+    source: str | None = ...,
     container=...,
 ) -> "LocalFile | None": ...
 
@@ -98,6 +99,7 @@ def file_input(
     *,
     default_dir: str = ...,
     default_source: str = ...,
+    source: str | None = ...,
     container=...,
 ) -> "list[LocalFile]": ...
 
@@ -111,6 +113,7 @@ def file_input(
     *,
     default_dir: str = ".",
     default_source: str = "folder",
+    source: str | None = None,
     container=None,
 ) -> "LocalFile | list[LocalFile] | None":
     """Drop-in replacement for ``st.file_uploader`` with a server-folder mode.
@@ -135,6 +138,8 @@ def file_input(
         help: Tooltip for the selection widget.
         default_dir: Folder pre-filled in the scan path input.
         default_source: ``"folder"`` (default) or ``"upload"``.
+        source: ``"folder"`` or ``"upload"`` fixed by the caller (which
+            offers the choice itself): no toggle is drawn.
         container: Streamlit container to render into (e.g. ``st.sidebar``).
             Defaults to the top-level ``st``.
     """
@@ -156,7 +161,7 @@ def file_input(
     def _default(sub: str, value):
         return {} if f"{key}{sub}" in st.session_state else {"value": value}
 
-    use_upload = target.toggle(
+    use_upload = source == "upload" if source is not None else target.toggle(
         "📤 Upload from browser instead",
         **_default("__source_is_upload", default_source == "upload"),
         key=f"{key}__source_is_upload",
