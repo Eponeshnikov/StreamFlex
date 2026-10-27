@@ -1,0 +1,82 @@
+# Protocol presets of the Offline Key Generator v2 page.
+#
+# A preset = which optional mechanisms are on + the values of the parameters
+# a preset controls + what a published peak carries. Everything else
+# (decorrelation, LDPC block, ε …) is the same in every preset and is set in
+# the sidebar. The page re-reads this file when it changes; pick the preset
+# again to apply an edit.
+#
+# Mechanisms (names used in `mechanisms = [...]`):
+#   pair_amp    ① drop a pair whose amplitude codes differ
+#   pair_track  ① drop a pair whose tracking bits differ
+#   screen      ③ drop Δτ with a low-confidence peak
+#   detrend     ③ remove the slow trend of Δτ
+#   check       ③ check bits: compare the low bits of the bin in public
+#   guard       ③ guard band: erase values near a bin edge
+#   soft        ④ soft decoding: trust bits far from a bin edge
+#   tiers       ④ soft decoding by the public peak quality (needs soft)
+#   frame_leak  ⑤ charge Eve for what the public frames reveal
+#
+# Published fields (`fields = [...]`): confidence, amplitude, tracking,
+# index, rss. The peak index and the tracking bit exclude each other; the
+# page adds the fields the switched-on mechanisms read.
+#
+# Numbers in `measured`: model rt_weight_8_cf_sym4; RT long =
+# results_rt_path_realistic_long_nowav_cf, July =
+# results_exp_zva_july_spiral_kaiser9 (test only, nothing tuned on it).
+
+default = "recommended"
+
+# Values every preset starts from; a preset's own [presets.<name>.mpc] /
+# [presets.<name>.calib] tables override single keys. Parameters of a
+# mechanism a preset leaves off still get a value here, so switching the
+# mechanism on later starts from a sensible one.
+[defaults.mpc]
+publish_threshold = 0.2         # P(real) a peak needs to go on the air
+local_keep_threshold = 0.35     # each side votes KEEP on its peak with q ≥ this
+final_keep_threshold = 0.35     # a pair survives when the lower q is ≥ this
+pair_max_amplitude_gap = 0      # pair_amp: codes may differ by this many steps
+track_tolerance_samples = 1.0   # pair_track: "seen before" within this many samples …
+track_max_speed_mps = 15.0      # … plus speed × Δt / c
+
+[defaults.calib]
+screen_q = 0.6        # screen: lowest q of the four bounding peaks
+check_bits = 1        # check: low bits of the bin number published per value
+check_extra = true    # check: quantize at b + c so the key keeps b bits
+rebalance = true      # check: even out the key bins after the check
+detrend = "auto"      # detrend: "auto" (only when the walk has a trend) or "on"
+guard = 0.1           # guard: width of the erased band, share of a bin
+
+[presets.recommended]
+label = "Recommended"
+summary = """All the checks that paid off: pairs with different amplitude codes or \
+tracking bits are dropped, one check bit per value, the trend of Δτ removed when the \
+walk has one."""
+measured = """RT long: BDR 2.3 %, final key 18.3k bits, raw key passes 91 % of NIST \
+block tests (random bits 99 %), 50.1 % ones. July scans: no trend (detrend stays off), \
+BDR 2.3 %, key 6.8k bits, NIST 96 % (2026-10-27)."""
+mechanisms = ["pair_amp", "pair_track", "detrend", "check", "soft", "tiers", "frame_leak"]
+fields = ["confidence", "amplitude", "tracking", "rss"]
+
+[presets.fewer_errors]
+label = "Fewer bit errors"
+summary = """As Recommended, with two check bits per value: fewer disagreeing bits \
+reach LDPC, at the price of more dropped values."""
+measured = """RT long: BDR 1.4 %, key 15.8k bits, NIST 90 %. July: BDR 1.6 %, key \
+4.4k bits, NIST 100 %. Fewer errors, a little less key."""
+mechanisms = ["pair_amp", "pair_track", "detrend", "check", "soft", "tiers", "frame_leak"]
+fields = ["confidence", "amplitude", "tracking", "rss"]
+[presets.fewer_errors.calib]
+check_bits = 2
+
+[presets.baseline]
+label = "Core protocol only"
+summary = """No filters: the agreement thresholds of before 2026-10-22, no pair \
+checks, no check bits, no detrend; soft decoding only. For comparison."""
+measured = """RT long: BDR 5.5 %, key 16.6k bits, but the raw key fails NIST (24 % of \
+blocks pass): it follows the walk's geometry. July: BDR 11.5 %, no key at all."""
+mechanisms = ["soft", "frame_leak"]
+fields = ["confidence", "amplitude", "rss"]
+[presets.baseline.mpc]
+publish_threshold = 0.35
+final_keep_threshold = 0.5
