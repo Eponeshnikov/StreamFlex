@@ -391,6 +391,24 @@ def is_device_oom(exc):
 _is_device_oom = is_device_oom
 
 
+def exception_text(exc):
+    """``str(exc)`` plus every distinct message down its cause chain.
+
+    Dr.Jit raises ``dr.while_loop(): encountered an exception (see above)``
+    with the real error (an OOM, an OptiX failure) only as ``__cause__``;
+    the page showing ``str(exc)`` told nothing.
+    """
+    parts, seen = [], set()
+    node = exc
+    while node is not None and id(node) not in seen:
+        seen.add(id(node))
+        text = str(node).strip() or type(node).__name__
+        if text not in parts:
+            parts.append(text)
+        node = node.__cause__ or node.__context__
+    return " ← ".join(reversed(parts)) if len(parts) > 1 else parts[0] if parts else ""
+
+
 def device_free_bytes():
     """Free VRAM on the devices this process has a context on, or None.
 
