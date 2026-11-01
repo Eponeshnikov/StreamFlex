@@ -21,9 +21,9 @@
 # index, rss. The peak index and the tracking bit exclude each other; the
 # page adds the fields the switched-on mechanisms read.
 #
-# Numbers in `measured`: model rt_weight_8_cf_sym4; RT long =
-# results_rt_path_realistic_long_nowav_cf, July =
-# results_exp_zva_july_spiral_kaiser9 (test only, nothing tuned on it).
+# Measured descriptions identify their scope; baseline numbers below are historical.
+# Updated research recommendations: keygen_comprehensive_audit (2026-11-01),
+# rt_weight_8_cf_sym4; July is not used to select a winning configuration.
 
 default = "recommended"
 
@@ -40,6 +40,11 @@ track_tolerance_samples = 1.0   # pair_track: "seen before" within this many sam
 track_max_speed_mps = 15.0      # … plus speed × Δt / c
 
 [defaults.calib]
+n_target = 1000
+cdf = "pooled"
+update = "growing"
+bits = 3
+bits_rule = "fixed"
 screen_q = 0.6        # screen: lowest q of the four bounding peaks
 check_bits = 1        # check: low bits of the bin number published per value
 check_extra = true    # check: quantize at b + c so the key keeps b bits
@@ -48,26 +53,30 @@ detrend = "auto"      # detrend: "auto" (only when the walk has a trend) or "on"
 guard = 0.1           # guard: width of the erased band, share of a bin
 
 [presets.recommended]
-label = "Recommended"
-summary = """All the checks that paid off: pairs with different amplitude codes or \
-tracking bits are dropped, one check bit per value, the trend of Δτ removed when the \
-walk has one."""
-measured = """RT long: BDR 2.3 %, final key 18.3k bits, raw key passes 91 % of NIST \
-block tests (random bits 99 %), 50.1 % ones. July scans: no trend (detrend stays off), \
-BDR 2.3 %, key 6.8k bits, NIST 96 % (2026-10-27)."""
-mechanisms = ["pair_amp", "pair_track", "detrend", "check", "soft", "tiers", "frame_leak"]
+label = "Recommended · universal growing"
+summary = """One causal growing policy for every scene. Pilot OFF: pooled growing DKW, \
+cap six, one check. Pilot ON: four-context conditional PIT per profile, robust \
+rank/magnitude ACF at 0.05, two key and two check bits. No sliding history."""
+measured = """2026-11-01, 18 records, rt_weight_8_cf_sym4. Kazan v4: BER 1.72%, \
+24,576 reconciled bits, 1/9 applicable NIST tests failed. This is a diagnostic, \
+not a guarantee on other walks or a certified secret-key length."""
+mechanisms = ["universal", "pair_amp", "pair_track", "detrend", "check", "soft", "tiers", "frame_leak"]
 fields = ["confidence", "amplitude", "tracking", "rss"]
+[presets.recommended.calib]
+bits = 6
+bits_rule = "dkw"
 
 [presets.fewer_errors]
 label = "Fewer bit errors"
-summary = """As Recommended, with two check bits per value: fewer disagreeing bits \
-reach LDPC, at the price of more dropped values."""
-measured = """RT long: BDR 1.4 %, key 15.8k bits, NIST 90 %. July: BDR 1.6 %, key \
-4.4k bits, NIST 100 %. Fewer errors, a little less key."""
+summary = """Standard algorithm with two key bits per value and one check bit: wider \
+key bins reduce disagreement at the cost of fewer key bits."""
+measured = """With detrend and the audit's common settings, three to two key bits \
+reduced Kazan BER from 1.62 to 0.98 percent and 2.17 to 1.21 percent. \
+Lower BER does not guarantee an independent or secret key."""
 mechanisms = ["pair_amp", "pair_track", "detrend", "check", "soft", "tiers", "frame_leak"]
 fields = ["confidence", "amplitude", "tracking", "rss"]
 [presets.fewer_errors.calib]
-check_bits = 2
+bits = 2
 
 [presets.baseline]
 label = "Core protocol only"
@@ -80,3 +89,6 @@ fields = ["confidence", "amplitude", "rss"]
 [presets.baseline.mpc]
 publish_threshold = 0.35
 final_keep_threshold = 0.5
+[presets.baseline.calib]
+bits = 6
+bits_rule = "dkw"
