@@ -39,6 +39,9 @@ pair_max_amplitude_gap = 0      # pair_amp: codes may differ by this many steps
 track_tolerance_samples = 1.0   # pair_track: "seen before" within this many samples …
 track_max_speed_mps = 15.0      # … plus speed × Δt / c
 
+[defaults.growing]
+key_bits = 2  # explicit fixed width of the universal ON branch, not a CDF-derived limit
+
 [defaults.calib]
 n_target = 1000
 cdf = "pooled"
