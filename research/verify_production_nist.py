@@ -1,7 +1,5 @@
 """Raw-key NIST check of the production universal policy on the research records."""
 import json
-from dataclasses import replace
-
 import numpy as np
 
 from pages.key_generation.compute.nist.runner import run_all
@@ -24,8 +22,6 @@ for case in CASES:
     raw = core.read(manifest["caches"][case]["decor"]["path"])
     raw.acf_pooled = raw.acf_profiles = raw.cca_curves = None
     cfg = G.baseline_config()
-    if case == "kazan_long_00":
-        cfg = replace(cfg, cdf="pooled")
     _, c = G.run(raw, cfg)
     report = {}
     for party in ("alice", "bob"):

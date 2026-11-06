@@ -21,8 +21,6 @@ for case in CASES:
     raw = core.read(manifest["caches"][case]["decor"]["path"])
     raw.acf_pooled = raw.acf_profiles = raw.cca_curves = None
     cfg = G.baseline_config()
-    if case == "kazan_long_00":
-        cfg = replace(cfg, cdf="pooled")
     d, c = G.run(raw, cfg)
     s = C.summary(c)
     sel = c.policy_selection
