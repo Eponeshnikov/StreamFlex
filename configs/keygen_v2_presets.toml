@@ -63,7 +63,7 @@ public width bit per used component. Public frames are not charged; switch \
 measured = """2026-11-07, 6 research records, production chain. Raw keys pass every \
 applicable NIST test or fail one: kazan v4 21,479 raw bits, 1/0, final key \
 8,656 bits = 29.0 bit/s; long 16,747, 0/0, 5,972 = 19.9 bit/s; July02 8,832, \
-0/0, 1,464; July03 7,719, 0/0, 963; July00/01 no key. Public debit \
+0/0, 1,430; July03 7,719, 0/0, 963; July00/01 no key. Public debit \
 11/11/8/7 bits: one width bit per used component plus two for the block. Final \
 keys pass 0/9. Thresholds were fitted on these \
 records and need unseen data."""
