@@ -226,3 +226,5 @@ opencode.jsonc
 # Binary meshes written for the three.js 3D renderer (utils/scene_three.py)
 static/scene3d/
 
+# Local research scripts and supporting files
+/research/
