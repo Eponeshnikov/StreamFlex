@@ -196,11 +196,33 @@ tests/test_offline_keygen.py
 # Локальные заметки и черновики спецификаций рядом с уже игнорируемым
 # other_docs/ — не часть программы.
 /docs/
+
+# Локальные файлы AI-ассистентов и агентов: не часть программы.
 CLAUDE.md
-.claude
-.agents
-.codex
-.kilo
+AGENTS.md
+KIMI.md
+GEMINI.md
+QWEN.md
+.claude/
+.agents/
+.codex/
+.kilo/
+.cursor/
+.cursorrules
+.windsurfrules
+.aider*
+.continue/
+.gemini/
+.qwen/
+.junie/
+.roo/
+.trae/
+.opencode/
+opencode.json
+opencode.jsonc
+.mcp.json
+.github/copilot-instructions.md
 
 # Binary meshes written for the three.js 3D renderer (utils/scene_three.py)
 static/scene3d/
+
