@@ -58,14 +58,16 @@ summary = """Standard ACF admission, then per component: causal linear9 detrend,
 local RMS scale, one growing CDF. The excluded 1000-value pilot grades each \
 component on its own 4+2-bit BDR: 4 Gray bits at or below 1 % with 30+ \
 observations, else 3. One public check bit; LDPC n from the key length; one \
-public width bit per used component."""
+public width bit per used component. Public frames are not charged; switch \
+*Frame leak* on in the sidebar to subtract the measured attacker model."""
 measured = """2026-11-07, 6 research records, production chain. Raw keys pass every \
 applicable NIST test or fail one: kazan v4 21,479 raw bits, 1/0, final key \
 8,656 bits = 29.0 bit/s; long 16,747, 0/0, 5,972 = 19.9 bit/s; July02 8,832, \
-0/0, 1,430; July03 7,719, 0/0, 963; July00/01 no key. Public debit 11/11/8/7 \
-bits instead of 34-36. Final keys pass 0/9. Thresholds were fitted on these \
+0/0, 1,464; July03 7,719, 0/0, 963; July00/01 no key. Public debit \
+11/11/8/7 bits: one width bit per used component plus two for the block. Final \
+keys pass 0/9. Thresholds were fitted on these \
 records and need unseen data."""
-mechanisms = ["universal", "pair_amp", "pair_track", "check", "soft", "frame_leak"]
+mechanisms = ["universal", "pair_amp", "pair_track", "check", "soft"]
 fields = ["confidence", "amplitude", "tracking", "rss"]
 [presets.recommended.calib]
 cdf = "per_profile"
@@ -73,6 +75,66 @@ n_target = 200
 check_bits = 1
 bits = 4
 bits_rule = "fixed"
+
+[presets.high_rate]
+label = "High rate · pooled CDF"
+summary = """Same universal chain with one pooled growing CDF instead of one per \
+component: fewer warm-up values are lost, so the key is longer. The trade is the \
+raw stream's uniformity — a pooled CDF leaves bin occupancy less flat, and the \
+raw key stops passing NIST on the two RT walks. Use it when privacy \
+amplification is the randomness source and key rate matters more than a clean \
+raw stream."""
+measured = """2026-11-07, 6 research records, production chain, frame leak off. kazan \
+v4 26,328 raw bits, raw NIST 3/4, final key 11,522 bits = 38.6 bit/s (one \
+final-key test failed in this run); long 20,435, 1/1, 5,901 = 19.7; July02 \
+9,669, 0/0, 1,668; July03 8,580, 0/0, 1,940; July00/01 no key. +23 % key over \
+Recommended, almost all of it on v4 and July03. Raw BDR 2.5-3.6 %."""
+mechanisms = ["universal", "pair_amp", "pair_track", "check", "soft"]
+fields = ["confidence", "amplitude", "tracking", "rss"]
+[presets.high_rate.calib]
+cdf = "pooled"
+n_target = 200
+check_bits = 1
+bits = 4
+
+[presets.clean]
+label = "High randomness · two check bits"
+summary = """Two public check bits instead of one. A value is kept only where both \
+low bits agree, so the raw key carries about half the bit errors of Recommended. \
+The measured proxy for randomness here is the lower raw BDR; NIST at these \
+stream lengths cannot rank the presets, and the final key always goes through \
+privacy amplification. The key is 18-25 % shorter."""
+measured = """2026-11-07, 6 research records, production chain, frame leak off. kazan \
+v4 16,579 raw bits, BDR 1.97 %, raw NIST 1/1, final key 7,130 = 23.9 bit/s; long \
+12,801, 2.05 %, 1/0, 4,520 = 15.1; July02 6,537, 2.49 %, 0/0, 894; July03 5,859, \
+1.74 %, 0/0, 225. Final keys 0/9. The raw NIST tally differs from Recommended by \
+a single test and is within noise."""
+mechanisms = ["universal", "pair_amp", "pair_track", "check", "soft"]
+fields = ["confidence", "amplitude", "tracking", "rss"]
+[presets.clean.calib]
+cdf = "per_profile"
+n_target = 200
+check_bits = 2
+bits = 4
+
+[presets.low_error]
+label = "Low error · 3-bit words"
+summary = """Two public check bits and three key bits on every component: wider key \
+bins, so the lowest disagreement per bit of the four presets, at the cost of the \
+shortest key. The width cap is a preset value (`bits = 3`); the pilot still \
+grades components but cannot award the fourth bit."""
+measured = """2026-11-07, 6 research records, production chain, frame leak off. kazan \
+v4 16,224 raw bits, BDR 1.41 %, raw NIST 1/0, final key 5,049 = 16.9 bit/s; long \
+12,843, 1.75 %, 1/0, 4,794 = 16.0; July02 6,537, 2.49 %, 0/0, 894; July03 5,859, \
+1.74 %, 0/0, 225. Final keys 0/9. 35-70 % less key than Recommended; use it when \
+the residual error rate, not key length, is the binding figure."""
+mechanisms = ["universal", "pair_amp", "pair_track", "check", "soft"]
+fields = ["confidence", "amplitude", "tracking", "rss"]
+[presets.low_error.calib]
+cdf = "per_profile"
+n_target = 200
+check_bits = 2
+bits = 3
 
 [presets.fewer_errors]
 label = "Fewer bit errors"

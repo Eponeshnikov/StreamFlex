@@ -167,10 +167,27 @@ def _concat_results(parts: list[C.CalibResult]) -> C.CalibResult:
     )
 
 
+def residual_window(x: dict[str, np.ndarray], window: int) -> dict[str, np.ndarray]:
+    """`G.residual` with a configurable trend window."""
+    out = {}
+    weights = G.trend_weights(window)
+    for party, a in x.items():
+        z = np.full(a.shape, np.nan)
+        for j in range(a.shape[1]):
+            ix = np.flatnonzero(np.isfinite(a[:, j]))
+            v = a[ix, j]
+            if len(v) > window:
+                history = np.lib.stride_tricks.sliding_window_view(v[:-1], window)
+                z[ix[window:], j] = v[window:] - history @ weights
+        out[party] = z
+    return out
+
+
 def calibrate(raw, selection, *, cdf_cdf="per_profile", n_target=300, rebalance=None,
               checks=0, guard=0.0, widths="pilot", preprocess="linear9",
               update="growing", rms_window=20, rebalance_window=0,
-              rebalance_min=None, width_map=None, rare_sample=32) -> C.CalibResult:
+              rebalance_min=None, width_map=None, rare_sample=32,
+              trend_window=G.TREND_WINDOW) -> C.CalibResult:
     """One pass: admitted residual -> own/pooled CDF -> words -> public mask.
 
     `cdf_cdf="hybrid"` reads a component on its own CDF only when that component
@@ -178,7 +195,8 @@ def calibrate(raw, selection, *, cdf_cdf="per_profile", n_target=300, rebalance=
     fallback CDF instead of being dropped. `width_map` is a per-component width
     array that overrides `widths`.
     """
-    z = G.residual(raw.x)
+    z = (G.residual(raw.x) if trend_window == G.TREND_WINDOW
+         else residual_window(raw.x, trend_window))
     work = replace(raw, x=local_rms(z, rms_window) if preprocess == "rms" else z)
     pilot_end = int(selection["pilot_end_step"])
     cfg = C.CalibConfig(
