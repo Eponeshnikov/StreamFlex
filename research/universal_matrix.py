@@ -76,20 +76,138 @@ def _rebalanced_u_windowed(u, steps, key_of, fine, c, cfg, window):
     return out
 
 
+def component_quality(raw, z: dict | None = None, work: dict | None = None,
+                      checks: int = 2, bits: int = 4) -> dict[int, tuple[int, float | None]]:
+    """(pilot observations, pilot Gray BDR) per Delta-tau component.
+
+    The BDR is measured at `bits` key + `checks` check bits on the pilot values
+    where both checks agree. Components with fewer than 8 pilot observations or
+    4 agreeing checks get `None`: the estimate is not trustworthy.
+    """
+    z = G.residual(raw.x) if z is None else z
+    work = G.local_rms(z) if work is None else work
+    steps, profiles = G._pilot(raw, z)
+    usable = (np.isfinite(work["alice"][steps, profiles])
+              & np.isfinite(work["bob"][steps, profiles]))
+    steps, profiles = steps[usable], profiles[usable]
+    levels = 1 << (bits + checks)
+    low = (1 << checks) - 1
+    out = {}
+    for j in range(raw.status.shape[1]):
+        take = profiles == j
+        n = int(take.sum())
+        if n < 8:
+            out[j] = (n, None)
+            continue
+        fine = {}
+        for party in PARTIES:
+            values = work[party][steps[take], profiles[take]]
+            ordered = np.sort(values)
+            u = (np.searchsorted(ordered, values, "left")
+                 + np.searchsorted(ordered, values, "right")) / (2 * len(ordered))
+            fine[party] = np.floor(u * levels).clip(0, levels - 1).astype(np.int64)
+        keep = (fine["alice"] & low) == (fine["bob"] & low)
+        if keep.sum() < 4:
+            out[j] = (n, None)
+            continue
+        a = C.gray(fine["alice"][keep] >> checks)
+        b = C.gray(fine["bob"][keep] >> checks)
+        out[j] = (n, float(np.bitwise_count(a ^ b).sum() / (bits * keep.sum())))
+    return out
+
+
+def graded_widths(quality: dict[int, tuple[int, float | None]], *,
+                  fallback: int = 3, t4: float = 0.015, t3: float = 0.05,
+                  n_min: int = 30, top: float | None = None,
+                  n_top: int = 100) -> dict[int, int]:
+    """More bits to components with enough statistics and a low pilot BDR.
+
+    A component with fewer than `n_min` pilot observations has no trustworthy
+    estimate and takes the record's `fallback` width (never an extreme one).
+    `top` promotes a component with at least `n_top` observations and a BDR at
+    or below it to five bits.
+    """
+    out = {}
+    for j, (n, bdr) in quality.items():
+        if bdr is None or n < n_min:
+            out[j] = fallback
+        elif top is not None and bdr <= top and n >= n_top:
+            out[j] = 5
+        elif bdr <= t4:
+            out[j] = 4
+        elif bdr <= t3:
+            out[j] = 3
+        else:
+            out[j] = 2
+    return out
+
+
+def _subset(res: C.CalibResult, mask: np.ndarray) -> C.CalibResult:
+    return replace(res, step=res.step[mask], profile=res.profile[mask],
+                   u={q: v[mask] for q, v in res.u.items()},
+                   bins={q: v[mask] for q, v in res.bins.items()},
+                   erased=res.erased[mask], value_bits=res.widths[mask],
+                   cdf_size=res.cdf_size[mask], calib_end={})
+
+
+def _concat_results(parts: list[C.CalibResult]) -> C.CalibResult:
+    """Concatenate key rows of several CDF passes, restoring time order."""
+    order = np.argsort(np.concatenate([p.step for p in parts]), kind="stable")
+    first = parts[0]
+    return replace(
+        first,
+        step=np.concatenate([p.step for p in parts])[order],
+        profile=np.concatenate([p.profile for p in parts])[order],
+        u={q: np.concatenate([p.u[q] for p in parts])[order] for q in PARTIES},
+        bins={q: np.concatenate([p.bins[q] for p in parts])[order] for q in PARTIES},
+        erased=np.concatenate([p.erased for p in parts])[order],
+        value_bits=np.concatenate([p.widths for p in parts])[order],
+        cdf_size=np.concatenate([p.cdf_size for p in parts])[order],
+        calib_end={k: v for p in parts for k, v in p.calib_end.items()},
+    )
+
+
 def calibrate(raw, selection, *, cdf_cdf="per_profile", n_target=300, rebalance=None,
               checks=0, guard=0.0, widths="pilot", preprocess="linear9",
               update="growing", rms_window=20, rebalance_window=0,
-              rebalance_min=None) -> C.CalibResult:
-    """One pass: admitted residual -> own/pooled CDF -> words -> public mask."""
+              rebalance_min=None, width_map=None, rare_sample=32) -> C.CalibResult:
+    """One pass: admitted residual -> own/pooled CDF -> words -> public mask.
+
+    `cdf_cdf="hybrid"` reads a component on its own CDF only when that component
+    has collected `n_target` admitted values; rarer components share one pooled
+    fallback CDF instead of being dropped. `width_map` is a per-component width
+    array that overrides `widths`.
+    """
     z = G.residual(raw.x)
     work = replace(raw, x=local_rms(z, rms_window) if preprocess == "rms" else z)
     pilot_end = int(selection["pilot_end_step"])
     cfg = C.CalibConfig(
-        algorithm="standard", n_target=n_target, cdf=cdf_cdf, bits=4, bits_rule="fixed",
-        update=update, guard=guard, check_bits=0, check_extra=True, rebalance=False,
-        detrend="off",
+        algorithm="standard", n_target=n_target,
+        cdf="per_profile" if cdf_cdf in ("hybrid", "rare_own") else cdf_cdf,
+        bits=4, bits_rule="fixed", update=update, guard=guard, check_bits=0,
+        check_extra=True, rebalance=False, detrend="off",
     )
-    base = C.calibrate(work, cfg)
+    if cdf_cdf == "hybrid":
+        own = C.calibrate(work, cfg)
+        pooled = C.calibrate(work, replace(cfg, cdf="pooled"))
+        full = set(map(int, own.calib_end))
+        rare_rows = ~np.isin(pooled.profile, list(full))
+        base = _concat_results([own, _subset(pooled, rare_rows)])
+        base = replace(base, calib_end=own.calib_end)
+    elif cdf_cdf == "rare_own":
+        # Full components: own CDF, normal sample. Rare components: their own
+        # CDF again, built from the `rare_sample` values they actually have.
+        own = C.calibrate(work, cfg)
+        full = set(map(int, own.calib_end))
+        rare = [j for j in range(work.status.shape[1]) if j not in full]
+        if rare:
+            small = C.calibrate(work, replace(cfg, n_target=rare_sample))
+            base = _concat_results([own, _subset(small, np.isin(small.profile, rare))])
+            base = replace(base, calib_end=own.calib_end)
+        else:
+            base = own
+    else:
+        base = C.calibrate(work, cfg)
     keep = base.step > pilot_end  # the excluded pilot never becomes key bits
     sub = lambda a: a[keep]  # noqa: E731
     base = replace(base, step=sub(base.step), profile=sub(base.profile),
@@ -98,8 +216,14 @@ def calibrate(raw, selection, *, cdf_cdf="per_profile", n_target=300, rebalance=
                    erased=sub(base.erased), value_bits=sub(base.widths),
                    cdf_size=sub(base.cdf_size) if base.cdf_size.size == keep.size
                    else np.zeros(int(keep.sum()), np.int64))
-    w = (np.array([selection["profile_bits"][str(int(p))] for p in base.profile], np.int64)
-         if widths == "pilot" else np.full(base.step.size, int(widths), np.int64))
+    if isinstance(width_map, dict):
+        w = np.asarray([width_map[int(p)] for p in base.profile], np.int64)
+    elif width_map is not None:
+        w = np.full(base.step.size, int(width_map), np.int64)
+    elif widths == "pilot":
+        w = np.array([selection["profile_bits"][str(int(p))] for p in base.profile], np.int64)
+    else:
+        w = np.full(base.step.size, int(widths), np.int64)
     u = base.u
     if rebalance:
         result_cfg = replace(cfg, cdf=rebalance, check_bits=checks, rebalance=True,

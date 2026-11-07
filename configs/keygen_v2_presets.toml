@@ -55,13 +55,16 @@ guard = 0.1           # guard: width of the erased band, share of a bin
 [presets.recommended]
 label = "Recommended · universal growing"
 summary = """Standard ACF admission, then per component: causal linear9 detrend, \
-local RMS scale, one growing CDF. The excluded 1000-value pilot selects 3 or 4 \
-Gray bits per component; one public check bit; LDPC n from the key length."""
+local RMS scale, one growing CDF. The excluded 1000-value pilot grades each \
+component on its own 4+2-bit BDR: 4 Gray bits at or below 1 % with 30+ \
+observations, else 3. One public check bit; LDPC n from the key length; one \
+public width bit per used component."""
 measured = """2026-11-07, 6 research records, production chain. Raw keys pass every \
-applicable NIST test or fail one: kazan v4 21,000 raw bits, 1/9 fail, final key \
-8,514 bits = 28.5 bit/s; long 17,581, 0/9, 5,163 = 17.2 bit/s; July02 8,832, \
-0/9, 1,416; July03 7,719, 0/9, 948; July00/01 no key. Final keys pass 0/9. \
-Thresholds were fitted on these records and need unseen data."""
+applicable NIST test or fail one: kazan v4 21,479 raw bits, 1/0, final key \
+8,656 bits = 29.0 bit/s; long 16,747, 0/0, 5,972 = 19.9 bit/s; July02 8,832, \
+0/0, 1,430; July03 7,719, 0/0, 963; July00/01 no key. Public debit 11/11/8/7 \
+bits instead of 34-36. Final keys pass 0/9. Thresholds were fitted on these \
+records and need unseen data."""
 mechanisms = ["universal", "pair_amp", "pair_track", "check", "soft", "frame_leak"]
 fields = ["confidence", "amplitude", "tracking", "rss"]
 [presets.recommended.calib]
