@@ -242,27 +242,31 @@ def calibrate(raw, selection, *, cdf_cdf="per_profile", n_target=300, rebalance=
         w = np.array([selection["profile_bits"][str(int(p))] for p in base.profile], np.int64)
     else:
         w = np.full(base.step.size, int(widths), np.int64)
+    c_row = (np.array([checks[int(p)] for p in base.profile], np.int64)
+             if isinstance(checks, dict) else np.full(base.step.size, int(checks), np.int64))
     u = base.u
     if rebalance:
-        result_cfg = replace(cfg, cdf=rebalance, check_bits=checks, rebalance=True,
+        result_cfg = replace(cfg, cdf=rebalance, check_bits=int(c_row.max(initial=0)),
+                             rebalance=True,
                              rebalance_min=rebalance_min or cfg.rebalance_min)
         groups = base.profile if rebalance == "per_profile" else np.zeros_like(base.profile)
-        u = (_rebalanced_u_windowed(base.u, base.step, groups, w + checks, checks,
+        u = (_rebalanced_u_windowed(base.u, base.step, groups, w + c_row, c_row,
                                     result_cfg, rebalance_window)
              if rebalance_window else
-             C._rebalanced_u(base.u, base.step, groups, w + checks, checks, result_cfg))
+             C._rebalanced_u(base.u, base.step, groups, w + c_row, c_row, result_cfg))
     fine, erased = {}, base.erased.copy()
     for p in PARTIES:
-        fine[p], band = C.quantize(u[p], w + checks, guard)
+        fine[p], band = C.quantize(u[p], w + c_row, guard)
         erased |= band
-    low = (1 << checks) - 1 if checks else 0
-    failed = ((fine["alice"] & low) != (fine["bob"] & low)) if checks else np.zeros_like(erased)
+    low = np.where(c_row > 0, (np.int64(1) << c_row) - 1, 0)
+    failed = ((fine["alice"] & low) != (fine["bob"] & low)) if c_row.any() else np.zeros_like(erased)
     erased |= failed
-    bins = {p: v >> checks for p, v in fine.items()}
+    bins = {p: v >> c_row for p, v in fine.items()}
     bits = {p: [format(int(v), f"0{int(b)}b")
                 for v, b in zip(C.gray(bins[p][~erased]), w[~erased], strict=True)]
             for p in PARTIES}
-    return replace(base, config=replace(cfg, cdf=rebalance or cdf_cdf, check_bits=checks),
+    return replace(base, config=replace(cfg, cdf=rebalance or cdf_cdf,
+                                        check_bits=int(c_row.max(initial=0))),
                    u=u, bins=bins, erased=erased, bits=bits, value_bits=w,
                    check_fail=failed, detrended=True, decision=None)
 
