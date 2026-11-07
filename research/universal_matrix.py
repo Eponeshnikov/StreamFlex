@@ -78,7 +78,8 @@ def _rebalanced_u_windowed(u, steps, key_of, fine, c, cfg, window):
 
 def calibrate(raw, selection, *, cdf_cdf="per_profile", n_target=300, rebalance=None,
               checks=0, guard=0.0, widths="pilot", preprocess="linear9",
-              update="growing", rms_window=20, rebalance_window=0) -> C.CalibResult:
+              update="growing", rms_window=20, rebalance_window=0,
+              rebalance_min=None) -> C.CalibResult:
     """One pass: admitted residual -> own/pooled CDF -> words -> public mask."""
     z = G.residual(raw.x)
     work = replace(raw, x=local_rms(z, rms_window) if preprocess == "rms" else z)
@@ -101,7 +102,8 @@ def calibrate(raw, selection, *, cdf_cdf="per_profile", n_target=300, rebalance=
          if widths == "pilot" else np.full(base.step.size, int(widths), np.int64))
     u = base.u
     if rebalance:
-        result_cfg = replace(cfg, cdf=rebalance, check_bits=checks, rebalance=True)
+        result_cfg = replace(cfg, cdf=rebalance, check_bits=checks, rebalance=True,
+                             rebalance_min=rebalance_min or cfg.rebalance_min)
         groups = base.profile if rebalance == "per_profile" else np.zeros_like(base.profile)
         u = (_rebalanced_u_windowed(base.u, base.step, groups, w + checks, checks,
                                     result_cfg, rebalance_window)
@@ -154,6 +156,18 @@ def main() -> None:
             ("rms50-grow300-c2-rw500", base | dict(preprocess="rms", rms_window=50, checks=2,
                                                    rebalance="per_profile", rebalance_window=500)),
         ],
+        "fine2": [
+            ("rms20-reb50", base | dict(preprocess="rms", rms_window=20, n_target=200,
+                                        checks=1, rebalance="per_profile", rebalance_min=50)),
+            ("rms50-reb50", base | dict(preprocess="rms", rms_window=50, n_target=200,
+                                        checks=1, rebalance="per_profile", rebalance_min=50)),
+            ("rms50-reb100", base | dict(preprocess="rms", rms_window=50, n_target=200,
+                                         checks=1, rebalance="per_profile", rebalance_min=100)),
+            ("rms100", base | dict(preprocess="rms", rms_window=100, n_target=200,
+                                   checks=1, rebalance="per_profile")),
+            ("rms30", base | dict(preprocess="rms", rms_window=30, n_target=200,
+                                  checks=1, rebalance="per_profile")),
+        ],
         "g": [
             ("c1-g05", base | dict(preprocess="rms", rms_window=50, n_target=200, checks=1,
                                    guard=0.05, rebalance="per_profile")),
@@ -200,9 +214,9 @@ def main() -> None:
         raw = core.read(json.loads(core.PARENT.read_text())["caches"][case]["decor"]["path"])
         raw.acf_pooled = raw.acf_profiles = raw.cca_curves = None
         admitted = (raw.status == G.D.ADMITTED).sum(axis=0)
-        selection = G.select(raw, "per_profile")
+        selection = G.select(raw)
         print(f"\n== {case} steps={len(raw.steps)} admitted/profile={admitted.tolist()}\n"
-              f"   pilot bdr={selection['pilot_bdr_4bit']:.4f} block={selection['block_bits']}",
+              f"   pilot bdr={selection['pilot_bdr_4bit']:.4f}",
               flush=True)
         for name, kw in grids[args.grid]:
             res = calibrate(raw, selection, **kw)
