@@ -126,6 +126,10 @@ def render(base_fig: go.Figure, animated: Sequence[int] | None,
         packed.append({"d": [packer.value(d) for d in data], "l": packer.value(patch or {}),
                        "t": None if traces is None else [int(t) for t in traces]})
     base = json.loads(cast(str, base_fig.to_json()))
+    # ``Figure.to_json`` embeds every frame as well; the player ships them
+    # packed below, so keeping this copy would double the payload (measured:
+    # 2100 frames added ~9.8 MB of base JSON).
+    base.pop("frames", None)
     layout = base["layout"]
     layout.pop("sliders", None)
     # Plotly's own play / step menus go (the player has its own); any other
