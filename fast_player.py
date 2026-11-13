@@ -6,8 +6,8 @@ same frames — produced by the same code as the page's animation, so the
 chart shows exactly the same marks — are packed once:
 
 * long numeric arrays go to one binary blob: ρ-like values in [−1, 1] as
-  int8 (·127, −128 = NaN), small integers (cell codes) as uint8, anything
-  else as float32;
+  int8 (·127, −128 = NaN), small integers (cell codes) as uint8, usually
+  float32 otherwise; large offsets with small variations retain float64;
 * everything else (short x/y lists, labels, colours, titles) stays JSON;
 * both are zlib-compressed and unpacked in the browser
   (``DecompressionStream``).
@@ -27,7 +27,7 @@ import base64
 import json
 import zlib
 from collections.abc import Iterable, Sequence
-from typing import Any, cast
+from typing import Any
 
 import numpy as np
 import plotly.graph_objects as go
@@ -49,18 +49,56 @@ class _Packer:
 
     def array(self, a: np.ndarray) -> Any:
         a = np.asarray(a)
-        if a.dtype.kind in "iub" and a.size and a.min() >= 0 and a.max() <= 255:
-            return {"$b": ["u8", self._put(a.astype(np.uint8).tobytes()), int(a.size)]}
+        if (
+            a.dtype.kind in "iub"
+            and a.size
+            and a.min() >= 0
+            and a.max() <= 255
+        ):
+            return {
+                "$b": [
+                    "u8",
+                    self._put(a.astype(np.uint8).tobytes()),
+                    int(a.size),
+                ]
+            }
         f = a.astype(np.float32)
         finite = f[np.isfinite(f)]
         # int8 only for ρ-like data that actually spans ~[−1, 1]; tiny-scale
         # data (delays ~1e-7 s, path gains ~1e-6) would quantise to 0.
         # Only float32 input is a candidate: callers pass coordinates that need
         # full precision (lag axes in s, which can also span ±1) as float64.
-        if a.dtype == np.float32 and (finite.size == 0
-                                      or 0.25 <= np.abs(finite).max() <= 1.0001):
-            q = np.where(np.isfinite(f), np.clip(np.round(f * 127), -127, 127), -128)
-            return {"$b": ["q8", self._put(q.astype(np.int8).tobytes()), int(a.size)]}
+        if a.dtype == np.float32 and (
+            finite.size == 0 or 0.25 <= np.abs(finite).max() <= 1.0001
+        ):
+            q = np.where(
+                np.isfinite(f), np.clip(np.round(f * 127), -127, 127), -128
+            )
+            return {
+                "$b": [
+                    "q8",
+                    self._put(q.astype(np.int8).tobytes()),
+                    int(a.size),
+                ]
+            }
+        # Absolute GNSS coordinates vary by millidegrees around ~116°/40°.
+        # float32 loses up to decimetres there. Keep float64 whenever casting
+        # would lose more than one millionth of the variation in the array.
+        if a.dtype == np.float64:
+            exact = a[np.isfinite(a)]
+            if exact.size and np.max(
+                np.abs(exact - exact.astype(np.float32))
+            ) > (np.ptp(exact) * 1e-6):
+                pad = (-self.size) % 8
+                if pad:
+                    self._put(b"\0" * pad)
+                return {
+                    "$b": [
+                        "f8",
+                        self._put(a.astype("<f8").tobytes()),
+                        int(a.size),
+                    ]
+                }
         pad = (-self.size) % 4  # Float32Array needs 4-byte alignment
         if pad:
             self._put(b"\0" * pad)
@@ -76,9 +114,12 @@ class _Packer:
                 return [self.value(row) for row in v]
             return _plain(v.tolist())
         if isinstance(v, (list, tuple)):
-            if (len(v) >= _MIN_BLOB and all(isinstance(x, (int, float, np.number)) or x is None
-                                             for x in v)):
-                return self.array(np.array([np.nan if x is None else x for x in v], float))
+            if len(v) >= _MIN_BLOB and all(
+                isinstance(x, (int, float, np.number)) or x is None for x in v
+            ):
+                return self.array(
+                    np.array([np.nan if x is None else x for x in v], float)
+                )
             return [self.value(x) for x in v]
         return _plain(v)
 
@@ -89,8 +130,10 @@ class _Packer:
 def _plain(v: Any) -> Any:
     if isinstance(v, (np.floating, float)):
         f = float(v)
-        # Significant digits, not decimals: round(1e-7, 5) == 0.
-        return None if not np.isfinite(f) else float(f"{f:.6g}")
+        # Layout image origins, map ranges and short marker arrays use this
+        # path. Rounding 116.349726° to six significant digits shifts the
+        # raster by ~23 m while its packed route retains other coordinates.
+        return None if not np.isfinite(f) else f
     if isinstance(v, np.integer):
         return int(v)
     if isinstance(v, list):
@@ -101,16 +144,28 @@ def _plain(v: Any) -> Any:
 def _webgl(base: dict) -> None:
     """Long line traces → scattergl (GPU); markers/text traces stay SVG."""
     for tr in base["data"]:
-        if tr.get("type", "scatter") == "scatter" and tr.get("mode") == "lines":
+        if (
+            tr.get("type", "scatter") == "scatter"
+            and tr.get("mode") == "lines"
+        ):
             x = tr.get("x")
             if x is not None and len(x) >= _MIN_BLOB:
                 tr["type"] = "scattergl"
 
 
-def render(base_fig: go.Figure, animated: Sequence[int] | None,
-           frames: Iterable[tuple], labels: Sequence[Any], *,
-           standalone: bool, height: int | None = None, key: str = "fastplayer",
-           prefix: str = "Time step ", start: int = 0) -> str:
+def render(
+    base_fig: go.Figure,
+    animated: Sequence[int] | None,
+    frames: Iterable[tuple],
+    labels: Sequence[Any],
+    *,
+    standalone: bool,
+    height: int | None = None,
+    key: str = "fastplayer",
+    prefix: str = "Time step ",
+    start: int = 0,
+    on_progress=None,
+) -> str:
     """HTML of a player over ``frames`` on top of ``base_fig``.
 
     Each frame is ``(data, layout_patch)`` or ``(data, layout_patch, traces)``:
@@ -118,44 +173,92 @@ def render(base_fig: go.Figure, animated: Sequence[int] | None,
     ``layout_patch`` is merged into the layout (a str = the title)."""
     packer = _Packer()
     packed = []
-    for fr in frames:
+    frame_list = list(frames)
+    total = len(frame_list)
+    if on_progress is not None:
+        on_progress(0, total, "packing")
+    for position, fr in enumerate(frame_list):
         data, patch = fr[0], fr[1]
         traces = fr[2] if len(fr) > 2 and fr[2] is not None else animated
         if isinstance(patch, str):
             patch = {"title": {"text": patch}}
-        packed.append({"d": [packer.value(d) for d in data], "l": packer.value(patch or {}),
-                       "t": None if traces is None else [int(t) for t in traces]})
-    base = json.loads(cast(str, base_fig.to_json()))
+        packed.append(
+            {
+                "d": [packer.value(d) for d in data],
+                "l": packer.value(patch or {}),
+                "t": None if traces is None else [int(t) for t in traces],
+            }
+        )
+        if on_progress is not None and (position + 1) % 100 == 0:
+            on_progress(position + 1, total, "packing")
+    if on_progress is not None:
+        on_progress(total, total, "packing")
+    # Only the base traces go through the packer.  ``base_fig.to_json()``
+    # would serialise every frame as JSON first and throw that copy away a
+    # line later, which is what made tens of thousands of frames take
+    # minutes; building the base dict directly removes that duplicate.
+    base = {
+        "data": [trace.to_plotly_json() for trace in base_fig.data],
+        "layout": base_fig.layout.to_plotly_json(),
+    }
     # ``Figure.to_json`` embeds every frame as well; the player ships them
     # packed below, so keeping this copy would double the payload (measured:
     # 2100 frames added ~9.8 MB of base JSON).
     base.pop("frames", None)
+    # Choose WebGL for long line traces *before* the arrays are packed: the
+    # packed reference is a dict, not a list, so the length test would fail.
+    _webgl(base)
+    # Long static arrays (a whole trajectory drawn once) go to the same binary
+    # blob as the frames: a 146 000-point route costs 1.2 MB packed instead of
+    # ~10 MB of JSON numbers.  The browser resolves them before the first
+    # plot, exactly like the frame payload.
+    base = packer.value(base)
     layout = base["layout"]
     layout.pop("sliders", None)
     # Plotly's own play / step menus go (the player has its own); any other
     # menu — e.g. a restyle toggle — stays.
-    menus = [m for m in layout.pop("updatemenus", None) or []
-             if not any(b.get("method") == "animate" for b in m.get("buttons", []))]
+    menus = [
+        m
+        for m in layout.pop("updatemenus", None) or []
+        if not any(b.get("method") == "animate" for b in m.get("buttons", []))
+    ]
     if menus:
         layout["updatemenus"] = menus
     layout["template"] = None
     layout["uirevision"] = "keep"  # zoom / 3D camera survive the redraws
+    # Dragging pans the map by default; the wheel still zooms and the
+    # modebar keeps box zoom.  A route panel is more often panned than
+    # box-zoomed, and this makes the first gesture work without hunting for
+    # the modebar.
+    layout.setdefault("dragmode", "pan")
     if height:
         layout["height"] = height
-    _webgl(base)
     payload = {
-        "base": base, "labels": [str(x) for x in labels],
-        "prefix": prefix, "start": int(start), "standalone": standalone,
-        "frames": base64.b64encode(zlib.compress(json.dumps(packed).encode(), 6)).decode(),
+        "base": base,
+        "labels": [str(x) for x in labels],
+        "prefix": prefix,
+        "start": int(start),
+        "standalone": standalone,
+        "frames": base64.b64encode(
+            zlib.compress(json.dumps(packed).encode(), 6)
+        ).decode(),
         "blob": base64.b64encode(zlib.compress(packer.blob(), 6)).decode(),
     }
-    return (_TEMPLATE.replace("__KEY__", key)
-            .replace("__PLOTLY__", get_plotlyjs())
-            .replace("__PAYLOAD__", json.dumps(payload)))
+    return (
+        _TEMPLATE.replace("__KEY__", key)
+        .replace("__PLOTLY__", get_plotlyjs())
+        .replace("__PAYLOAD__", json.dumps(payload))
+    )
 
 
-def from_figure(fig: go.Figure, *, standalone: bool = False, key: str = "fastplayer",
-                height: int | None = None) -> str:
+def from_figure(
+    fig: go.Figure,
+    *,
+    standalone: bool = False,
+    key: str = "fastplayer",
+    height: int | None = None,
+    on_progress=None,
+) -> str:
     """Any Plotly figure with ``frames`` (and the slider of
     ``utils.add_plotly_frame_slider``) as a fast player — the same frames."""
     layout = fig.layout
@@ -166,7 +269,10 @@ def from_figure(fig: go.Figure, *, standalone: bool = False, key: str = "fastpla
         if slider.currentvalue and slider.currentvalue.prefix:
             prefix = slider.currentvalue.prefix
     if len(labels) != len(fig.frames):
-        labels = [f.name if f.name is not None else str(i) for i, f in enumerate(fig.frames)]
+        labels = [
+            f.name if f.name is not None else str(i)
+            for i, f in enumerate(fig.frames)
+        ]
 
     def frames():
         for f in fig.frames:
@@ -174,12 +280,24 @@ def from_figure(fig: go.Figure, *, standalone: bool = False, key: str = "fastpla
             patch = f.layout.to_plotly_json() if f.layout else {}
             patch.pop("sliders", None)
             patch.pop("updatemenus", None)
-            traces = list(f.traces) if f.traces is not None else list(range(len(data)))
+            traces = (
+                list(f.traces)
+                if f.traces is not None
+                else list(range(len(data)))
+            )
             yield data, patch, traces
 
-    return render(fig, None, frames(), labels, standalone=standalone, key=key,
-                  height=height or (int(layout.height) if layout.height else None),
-                  prefix=prefix)
+    return render(
+        fig,
+        None,
+        frames(),
+        labels,
+        standalone=standalone,
+        key=key,
+        height=height or (int(layout.height) if layout.height else None),
+        prefix=prefix,
+        on_progress=on_progress,
+    )
 
 
 _TEMPLATE = r"""<!doctype html>
@@ -203,6 +321,7 @@ _TEMPLATE = r"""<!doctype html>
  <button id="prev" title="previous step (←)">◀</button><button id="next" title="next step (→)">▶</button><button id="play" title="play / pause">Play</button>
  <input id="pos" type="range" min="0" value="0"><span id="lbl"></span>
  <select id="speed" title="steps per tick"><option>1</option><option selected>5</option><option>20</option><option>100</option></select>
+ <span style="opacity:.55;font-size:12px">wheel zoom · drag pan · modebar box zoom</span>
  <button id="theme" style="display:none">◐</button>
 </div>
 <script>
@@ -220,6 +339,7 @@ function arr(ref) {
   const [kind, off, n] = ref;
   if (kind === "u8") return Array.from(new Uint8Array(blob, off, n));
   if (kind === "f4") return new Float32Array(blob, off, n);
+  if (kind === "f8") return new Float64Array(blob, off, n);
   const q = new Int8Array(blob, off, n), out = new Float32Array(n);
   for (let i = 0; i < n; i++) out[i] = q[i] === -128 ? NaN : q[i] / 127;
   return out;
@@ -240,11 +360,14 @@ function merge(dst, src) {
     else dst[k] = v;
   }
 }
-const data = P.base.data, layout = P.base.layout;
+const data = resolve(P.base.data), layout = resolve(P.base.layout);
 layout.datarevision = 0;
 document.getElementById("load").remove();
 gd.style.display = ""; document.getElementById("bar").style.display = "";
-await Plotly.newPlot(gd, data, layout, {responsive: true, displaylogo: false});
+await Plotly.newPlot(gd, data, layout, {responsive: true, displaylogo: false,
+  scrollZoom: true, doubleClick: "reset",
+  modeBarButtonsToAdd: ["pan2d", "zoomIn2d", "zoomOut2d"],
+  modeBarButtonsToRemove: ["lasso2d", "select2d"]});
 
 // ---- theme ----
 const AXES = Object.keys(layout).filter(k => /^[xy]axis\d*$/.test(k));
