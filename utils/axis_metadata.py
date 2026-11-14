@@ -246,6 +246,8 @@ def build_axis_metadata(
             "v_min": seg.get("v_min"),
             "v_max": seg.get("v_max"),
         }
+        if 'time_offset_s' in seg:
+            entry['time_offset_s'] = float(seg['time_offset_s'])
         # A leg of a multi-tower walk: which walk, which leg, and where it
         # sits on that walk's clock -- what lets an analysis stitch the
         # legs back together or keep them apart. Only on such segments, so
@@ -276,6 +278,8 @@ def build_axis_metadata(
         },
         "tx_index": tx_index,
     }
+    if len(time_segments) == 1 and 'time_offset_s' in time_segments[0]:
+        meta['time']['offset_s'] = time_segments[0]['time_offset_s']
     return meta
 
 
