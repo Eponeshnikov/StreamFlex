@@ -22,8 +22,8 @@
 # page adds the fields the switched-on mechanisms read.
 #
 # Measured descriptions identify their scope; baseline numbers below are historical.
-# Updated research recommendations: keygen_comprehensive_audit (2026-11-01),
-# rt_weight_8_cf_sym4; July is not used to select a winning configuration.
+# Recommended, High rate and Low error were compared on Kazan v4 and July
+# recordings on 2026-11-19 with a 1000-value initial CDF pool.
 
 default = "recommended"
 
@@ -55,65 +55,57 @@ guard = 0.1           # guard: width of the erased band, share of a bin
 
 [presets.recommended]
 label = "Recommended (More randomnes)"
-summary = """Standard ACF admission, causal linear9 detrend and local RMS50 scale,
-per-component growing CDF with 100 initial values. Excluded 1000-value pilot,
-graded 3/4 Gray bits, one public check bit and rebalance. LDPC block plan from raw length. Frame leak is off. Selected on the research records; unseen validation
-is still needed."""
-measured = """2026-11-11 raw-stream sweep, frame leak off. kazan v4: 23,421 bits,
-BDR 2.90%, minimum NIST p over Alice/Bob 0.0109; long: 18,361, 3.52%, 0.0290;
-July02: 9,315, 3.94%, 0.0282; July03: 8,160, 2.66%, 0.0931. No applicable raw
-NIST test failed on those four records. These are minima, not every test's p.
-Final key length and rate have not been measured for these settings."""
+summary = """One growing CDF with 1000 admitted values from causal linear9 with local RMS50, an excluded
+1000-value width pilot, adaptive 3/4 Gray key bits and 1 public check bit(s)."""
+measured = """Kazan v4: 107.21 bit/s after PA, 167.79 bit/s after LDPC, 168.11 raw bit/s, all using time
+after CDF fill. Raw BDR 1.099%. Equal-length raw NIST failures, Alice/Bob: 0/9 and 0/9. Four
+July recordings: 33.09 bit/s after PA, 222.86 bit/s after LDPC, 226.09 raw bit/s, all using
+time after CDF fill. Raw BDR 5.412%. Equal-length raw NIST failures, Alice/Bob: 0/32 and
+0/32."""
 mechanisms = ["universal", "pair_amp", "pair_track", "check", "soft"]
 fields = ["confidence", "amplitude", "tracking", "rss"]
 [presets.recommended.calib]
 universal_preprocess = "linear9_rms"
-cdf = "per_profile"
-n_target = 100
+cdf = "pooled"
+n_target = 1000
 check_bits = 1
 bits = 4
 bits_rule = "fixed"
 
 [presets.high_rate]
 label = "High rate · pooled CDF"
-summary = """Standard ACF admission, original log Δτ without linear9 detrend or
-RMS scaling. One pooled growing CDF, 200 initial values, excluded 1000-value
-pilot, graded 3/4 Gray bits, one public check bit and rebalance. Longer raw
-stream with fewer disagreements; raw NIST fails on the Kazan walks.
-Final key rate has not been measured for these settings."""
-measured = """2026-11-11 raw-stream sweep, frame leak off. kazan v4: 34,004 bits,
-BDR 0.56%; long: 26,347, 0.77%; July02: 11,829, 2.00%; July03: 9,978, 1.40%.
-Minimum raw NIST p over Alice/Bob: numerically zero on both Kazan walks,
-0.0153 on July02 and 0.000911 on July03. LDPC/PA not measured; the old final
-key lengths do not apply. Privacy amplification alone does not establish
-secrecy of a predictable input."""
+summary = """One growing CDF with 1000 admitted values from original log delta-tau, an excluded 1000-value
+width pilot, adaptive 3/4 Gray key bits and 1 public check bit(s)."""
+measured = """Kazan v4: 141.63 bit/s after PA, 195.57 bit/s after LDPC, 196.31 raw bit/s, all using time
+after CDF fill. Raw BDR 0.206%. Equal-length raw NIST failures, Alice/Bob: 8/9 and 8/9. Four
+July recordings: 79.30 bit/s after PA, 283.90 bit/s after LDPC, 285.41 raw bit/s, all using
+time after CDF fill. Raw BDR 2.613%. Equal-length raw NIST failures, Alice/Bob: 2/32 and
+2/32."""
 mechanisms = ["universal", "pair_amp", "pair_track", "check", "soft"]
 fields = ["confidence", "amplitude", "tracking", "rss"]
 [presets.high_rate.calib]
 universal_preprocess = "none"
 cdf = "pooled"
-n_target = 200
+n_target = 1000
 check_bits = 1
 bits = 4
 
 [presets.low_error]
 label = "Low error · 3-bit words"
-summary = """Standard ACF admission, original log Δτ without linear9 detrend or
-RMS scaling. Per-component growing CDF, 200 initial values, excluded 1000-value
-pilot, three Gray key bits and two public check bits, rebalance. Prioritizes
-agreement; raw NIST fails on the Kazan walks. Frame leak is off."""
-measured = """2026-11-11 raw-stream sweep, frame leak off. kazan v4: 20,922 bits,
-BDR 0.43%; long: 16,989, 0.41%; July02: 8,490, 1.22%; July03: 7,836, 0.65%.
-Minimum raw NIST p over Alice/Bob: numerically zero on both Kazan walks,
-0.00255 on July02 and 0.0340 on July03. Final key length and rate have not
-been measured for these settings."""
+summary = """One growing CDF with 1000 admitted values from original log delta-tau, an excluded 1000-value
+width pilot, three Gray key bits and 5 public check bit(s)."""
+measured = """Kazan v4: 79.97 bit/s after PA, 119.57 bit/s after LDPC, 119.62 raw bit/s, all using time
+after CDF fill. Raw BDR 0.003%. Equal-length raw NIST failures, Alice/Bob: 3/9 and 3/9. Four
+July recordings: 20.83 bit/s after PA, 96.69 bit/s after LDPC, 101.62 raw bit/s, all using
+time after CDF fill. Raw BDR 0.395%. Equal-length raw NIST failures, Alice/Bob: 8/32 and
+8/32."""
 mechanisms = ["universal", "pair_amp", "pair_track", "check", "soft"]
 fields = ["confidence", "amplitude", "tracking", "rss"]
 [presets.low_error.calib]
 universal_preprocess = "none"
-cdf = "per_profile"
-n_target = 200
-check_bits = 2
+cdf = "pooled"
+n_target = 1000
+check_bits = 5
 bits = 3
 
 [presets.fewer_errors]
