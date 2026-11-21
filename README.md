@@ -81,22 +81,29 @@ A flexible application framework with plugin support, state snapshots, and dynam
 
 ## Execution & Deployment
 
-### Installing Dependencies
+### Installation
 
-Firstly, you need install [`uv`](https://docs.astral.sh/uv/getting-started/installation/).
+Install Git, Python 3.10 or newer for the bootstrap script, and [uv](https://docs.astral.sh/uv/getting-started/installation/). The application environment uses the Python version in `.python-version`. GitLab access is required for private repositories.
 
-To install dependencies for a project, use the `uv sync` command:
-
-```bash
-uv sync
-```
-
-This command installs all dependencies listed in `pyprojects.toml`.
-
-### Launching the Application
-
-Once the dependencies are installed, launch the application using Streamlit with the following command:
+From a new machine, clone the core and install the selected components in one command.
 
 ```bash
-streamlit run app.py
+git clone https://gitlab.epohub.netcraze.pro/StreamFlex/StreamFlex.git && python3 StreamFlex/scripts/bootstrap.py --plugin CIR-Generator --plugin ResultsSaverPlugin --page private_peaks_processing
 ```
+
+- Omit the flags for the core and its two bundled plotting pages. Repeat `--plugin NAME` to select plugins, or use `--plugin all`.
+- Use `--pages` for every private page or repeat `--page NAME` to select entries in the navigation. The Pages checkout includes its shared modules. CIR-Generator and OptiReceiver also need that checkout.
+- Add `--research` to clone the separate Research repository. `--skip-sync` fetches source only. `--list` lists plugin names.
+- The script keeps existing checkouts and installs from the root lockfile. Pages and OptiReceiver use `research/rtw8-fourway-20261117`; the other components use `master`. Set `--gitlab-root` to use an alternate mirror.
+
+Existing measurements, scenes, models, results and tracing caches can be copied separately. See the [data layout](docs/DATA_LAYOUT.md).
+
+### Launch
+
+Run from the project root.
+
+```bash
+uv run --no-sync streamlit run app.py
+```
+
+[Core documentation](docs/README.md) · [Pages documentation](pages/docs/README.md) · [Research](research/README.md)

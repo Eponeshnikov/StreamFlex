@@ -17,9 +17,11 @@ exclude:
   - "eve_trajectory.py"
   - "first_component_eval.py"
   - "first_component_worker.py"
+  - "model_contract.py"
   - "peak_windows.py"
   - "peaks_processing_worker.py"
   - "private_viz_configs.py"
+  - "resultsaver_paths.py"
 
 categories:
   "Coding":

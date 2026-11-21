@@ -184,7 +184,8 @@ analytics
 !/pages/csv_plot_editor_format.md
 configs/sweep/config_generation.md
 other_docs
-sionna-scenes
+/sionna-scenes/*
+!/sionna-scenes/README.md
 *.json
 test*
 # Keep the offline-keygen regression suite reviewable even though legacy
@@ -193,9 +194,11 @@ test*
 tests/*
 tests/test_offline_keygen.py
 
-# Локальные заметки и черновики спецификаций рядом с уже игнорируемым
-# other_docs/ — не часть программы.
-/docs/
+# Local documentation drafts.
+/docs/drafts/
+/configs/local_pages.toml
+!/configs/material_scattering.json
+!/configs/parked_cars.json
 
 # Локальные файлы AI-ассистентов и агентов: не часть программы.
 CLAUDE.md
@@ -231,4 +234,5 @@ static/scene3d/
 
 # Measured datasets (tens of GB) live inside the project but never in Git.
 # Tracked instead: dataset_tools/ (sources, manifests, readers) and the page code.
-/datasets/
+/datasets/*
+!/datasets/README.md

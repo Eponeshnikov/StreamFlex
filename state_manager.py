@@ -157,12 +157,14 @@ class StateManager:
                 If an error occurs during the listing process, an empty list is returned.
         """
         try:
-            files = [
-                f
-                for f in os.listdir(self.snapshots_dir)
-                if f.endswith(".pkl") and not f.startswith("_")
-            ]
-            snapshots = [f[:-4] for f in files]  # Remove .pkl extension
+            with os.scandir(self.snapshots_dir) as entries:
+                snapshots = sorted(
+                    entry.name[:-4]
+                    for entry in entries
+                    if entry.name.endswith(".pkl")
+                    and not entry.name.startswith(("_", "."))
+                    and entry.is_file(follow_symlinks=False)
+                )
             logger.info(
                 "Found {} snapshots in directory '{}'",
                 len(snapshots),

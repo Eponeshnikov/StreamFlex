@@ -856,24 +856,16 @@ The [core architecture](ARCHITECTURE.md) describes plugin loading, state and the
     `filter_specs.discover_param_filters` with no registry entry; the
     list fields (file names, preset names) are correctly skipped.
 
-  **The measured scans** (`Experimental JSON`) live in one folder,
-  `output_data/experiment_ir/`, and the **file name is the index** —
-  `<band>_<scenario>_<pos>_<dirs>_<power>dBm_<cols>x<rows>_<date>.json`,
-  parsed by `plugins/CIR-Generator/experiment_data.py` (that folder's README
-  has the scheme). There is no manifest to rebuild: drop a file in and it
-  shows up, and an unrecognised name still loads through the legacy parser
-  or straight from its contents. `experiment_ir_2026/` and
-  `experiment_ir_duplex_2026/` are the archive of the original layout —
-  the merged files are *hard links*, so nothing is stored twice and old
-  relative paths out of snapshots still resolve (`resolve_path`).
-  `STREAMFLEX_EXPERIMENT_ROOT` moves the library elsewhere (a second disk,
-  a test fixture) and is read per call, not at import.
+  **Experimental JSON** reads VNA scans from the
+  [measurement library](../datasets/README.md). `datasets/catalog.json`
+  maps stable selection IDs to canonical files, including the room 1405
+  crosses, grid and G-scan. The loader still accepts legacy file names and
+  paths from saved snapshots. `STREAMFLEX_EXPERIMENT_ROOT` selects a separate
+  library when set. WiWorld and Niigata use their own Pages importers.
 
-  **These scans are an indoor bench check on real hardware**, not a
-  measured counterpart of the ray-traced city — no hardware exists at
-  that scale, so the RT track stays simulation-only and the measured one
-  validates it on a table. The scanned patch is 1.23 × 1.17 m (42×40 at
-  30 mm), and a scene is irrelevant to it.
+  The historic 42×40 scans cover a 1.23 × 1.17 m patch with 30 mm spacing.
+  The [scene catalog](../sionna-scenes/README.md) records which geometry
+  matches each measured campaign.
 
   **The scan's `x`/`y` are positioner millimetres** and everything else —
   the TX/RX knobs, `scene_metadata`, every distance downstream — is

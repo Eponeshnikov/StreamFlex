@@ -402,10 +402,9 @@ See [per-plugin data contracts](PLUGIN_PIPELINE.md) and the [Pages architecture]
   is input to a run rather than a product of one.
 - `output_data/` — pipeline outputs. `.gitignore` keeps the folder skeleton via
   `.gitkeep`; only `processed/` and `dataset/` carry committed gitkeeps. Plugin
-  subfolders are created at runtime. **Not the only root** — see below.
-  `experiment_ir/` is the merged VNA measurement library (name-encoded
-  metadata, hard-linked to the `experiment_ir_2026` /
-  `experiment_ir_duplex_2026` archives); it is input, not output.
+  subfolders are created at runtime. [Storage lifecycle](DATA_LAYOUT.md).
+- `datasets/indoor/room_1405/` — indoor VNA measurements.
+  `datasets/outdoor/` — outdoor channel datasets.
 - `configs/` — `page_categories.yaml` (nav), `plotly/` & `plots/` (chart themes
   for the visualization pages), `sweep/` (CIR-Generator parameter-sweep
   presets), `material_scattering.json` (the CIR-Generator's diffuse-scattering
@@ -428,9 +427,9 @@ and snapshot like any other widget:
 | `storage_root_control` — results | `STORAGE_ROOTS` | `output_data/` | `/mnt/data/streamflex/output_data/` |
 | `scratch_root_control` — `.tmp`/`.cache` | `SCRATCH_ROOTS` | `.` | `/mnt/data/streamflex/` |
 
-They are separate on purpose: scratch is write-heavy and disposable, so
-parking it on the big disk while results stay in the project (or the reverse)
-is a reasonable thing to want.
+They are separate so write-heavy temporary work can use a different disk
+from results. The scratch root also locates the persistent tracing cache,
+which should be carried forward even when retiring completed scratch files.
 
 Only the *root* moves. Everything under it — `plugins/<plugin>/<timestamp>/`,
 `first_component/`, `resultsaver/`, `.tmp/`, `.cache/` — is laid out identically

@@ -1,4 +1,6 @@
 import os
+import tomllib
+from pathlib import Path
 
 import streamlit as st
 import yaml  # Required to parse the config file
@@ -10,6 +12,8 @@ from utils import (
     release_scene_memory,
     sweep_orphaned_joblib_folders,
 )
+
+PUBLIC_PAGES = {"csv_plot_editor.py", "plotly_style_configurator.py"}
 
 # Every page runs through this entry script, so this is the one place that
 # covers the offline pages too: without it a closed tab aborts a peaks-
@@ -121,6 +125,20 @@ if config and "categories" in config:
     # (e.g. shared configuration) that live under pages/ but are not pages —
     # skip them so they don't show up as nav entries.
     excluded_files = set(config.get("exclude", []))
+    private_pages = None
+    local_pages = Path(__file__).resolve().parent / "configs/local_pages.toml"
+    if local_pages.is_file():
+        private_pages = set()
+        try:
+            with local_pages.open("rb") as handle:
+                names = tomllib.load(handle).get("private")
+            if not isinstance(names, list) or not all(
+                isinstance(name, str) for name in names
+            ):
+                raise ValueError("Expected an array of page names under 'private'")
+            private_pages = set(names)
+        except (OSError, ValueError) as error:
+            st.error(f"Cannot read the private page selection: {error}")
 
     # Scan pages directory and assign files to categories. Files ending in
     # `_worker.py` are import-only helpers that must live under pages/ (so
@@ -131,6 +149,11 @@ if config and "categories" in config:
             filename.endswith(".py")
             and not filename.endswith("_worker.py")
             and filename not in excluded_files
+            and (
+                private_pages is None
+                or filename in PUBLIC_PAGES
+                or filename in private_pages
+            )
         ):
             page_path = f"pages/{filename}"
             page_title = format_title(filename)

@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "_comment": [
+    "Ready-made diffuse-scattering tables for the CIR-Generator's Sionna Ray",
+    "Tracing model ('Material Scattering (S / xpd per material)'). Selecting",
+    "several presets merges them left to right, so a wide '*' entry can be",
+    "laid down first and individual materials corrected on top of it.",
+    "",
+    "A table maps a radio-material name to either a plain scattering",
+    "coefficient S or the full entry {s, xpd, pattern, alpha_r}. The key '*'",
+    "applies to every material the scene carries and is overridden by an",
+    "explicit entry. Material names are the scene's own: sionna's munich",
+    "carries brick/concrete/marble/metal/wood, and scenes written by",
+    "pages/osm_scene add asphalt, foliage, water, sea_water, roof_tiles and",
+    "the ground types. Patterns: lambertian, directive (alpha_r), backscattering.",
+    "",
+    "Cached CIRs key on the preset NAME, not on these numbers: after editing",
+    "a table in place, tick 'Reset Cache' once (or add a new preset instead)."
+  ],
+  "presets": [
+    {
+      "name": "none",
+      "label": "None — scene as loaded (S = 0)",
+      "description": "Specular only. Every material Sionna ships carries scattering_coefficient = 0, so this is what a scene looks like untouched.",
+      "table": {}
+    },
+    {
+      "name": "uniform_weak",
+      "label": "Uniform weak — S = 0.2, lambertian",
+      "description": "Smooth facades. Lower end of the 1-10 GHz measurements of building walls.",
+      "table": {"*": {"s": 0.2, "xpd": 0.1, "pattern": "lambertian"}}
+    },
+    {
+      "name": "uniform_moderate",
+      "label": "Uniform moderate — S = 0.4, lambertian",
+      "description": "Typical mixed urban surfaces; a reasonable default when the scene's materials are not known individually.",
+      "table": {"*": {"s": 0.4, "xpd": 0.15, "pattern": "lambertian"}}
+    },
+    {
+      "name": "uniform_strong",
+      "label": "Uniform strong — S = 0.6, lambertian",
+      "description": "Rough / ornamented surfaces. Upper bound: most of the incident power leaves the surface diffusely.",
+      "table": {"*": {"s": 0.6, "xpd": 0.2, "pattern": "lambertian"}}
+    },
+    {
+      "name": "urban_directive",
+      "label": "Urban directive — S = 0.4, directive (alpha_r = 5)",
+      "description": "Same strength as uniform_moderate but with the lobe around the specular direction that measurements of building walls actually show.",
+      "table": {"*": {"s": 0.4, "xpd": 0.15, "pattern": "directive", "alpha_r": 5}}
+    },
+    {
+      "name": "urban_backscatter",
+      "label": "Urban backscatter — S = 0.4, backscattering (alpha_r = 4)",
+      "description": "For geometries where TX and RX look at the same wall from nearly the same side.",
+      "table": {"*": {"s": 0.4, "xpd": 0.15, "pattern": "backscattering", "alpha_r": 4}}
+    },
+    {
+      "name": "building_materials",
+      "label": "Per material — buildings (concrete / brick / marble / wood / metal / glass)",
+      "description": "Per-material strengths for the five materials sionna's munich scene carries, plus glass. Metal and glass are smooth and scatter little; brick and plaster-finished concrete scatter most.",
+      "table": {
+        "concrete": {"s": 0.4, "xpd": 0.15, "pattern": "directive", "alpha_r": 5},
+        "brick": {"s": 0.5, "xpd": 0.2, "pattern": "directive", "alpha_r": 4},
+        "marble": {"s": 0.2, "xpd": 0.1, "pattern": "directive", "alpha_r": 8},
+        "wood": {"s": 0.3, "xpd": 0.15, "pattern": "lambertian"},
+        "metal": {"s": 0.1, "xpd": 0.05, "pattern": "directive", "alpha_r": 10},
+        "glass": {"s": 0.1, "xpd": 0.05, "pattern": "directive", "alpha_r": 10}
+      }
+    },
+    {
+      "name": "osm_outdoor",
+      "label": "Per material — OSM outdoor surfaces (asphalt / foliage / water / tiles / ground)",
+      "description": "The extra materials pages/osm_scene writes. Foliage is a volume of leaves and scatters almost everything it does not absorb; water is a mirror.",
+      "table": {
+        "asphalt": {"s": 0.3, "xpd": 0.2, "pattern": "lambertian"},
+        "foliage": {"s": 0.8, "xpd": 0.4, "pattern": "lambertian"},
+        "roof_tiles": {"s": 0.4, "xpd": 0.2, "pattern": "lambertian"},
+        "water": {"s": 0.05, "xpd": 0.02, "pattern": "directive", "alpha_r": 30},
+        "sea_water": {"s": 0.05, "xpd": 0.02, "pattern": "directive", "alpha_r": 30},
+        "very_dry_ground": {"s": 0.4, "xpd": 0.2, "pattern": "lambertian"},
+        "medium_dry_ground": {"s": 0.4, "xpd": 0.2, "pattern": "lambertian"},
+        "wet_ground": {"s": 0.3, "xpd": 0.15, "pattern": "lambertian"}
+      }
+    }
+  ]
+}

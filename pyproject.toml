@@ -12,7 +12,10 @@ dependencies = [
     "numba>=0.67.0",
     "optuna>=4.9.0",
     "orjson>=3.11.0",
+    "plotly>=6.0.1",
     "psutil>=7.0.0",
+    "pyyaml>=6.0",
+    "sionna-rt>=2.0.1",
     "streamlit>=1.63",
     "toml>=0.10.2",
     "tomli>=2.2.1",
@@ -78,6 +81,24 @@ opti-receiver = [
 
     "torch>=2.10.0",
     "torchvision>=0.25.0",
+]
+pages = [
+    "folium>=0.20.0",
+    "galois>=0.4.4",
+    "infomeasure>=0.5.1",
+    "joblib>=1.6",
+    "mapbox-earcut>=2.0.0",
+    "polars>=1.30.0",
+    "pyarrow>=20.0.0",
+    "requests>=2.32",
+    "scikit-learn>=1.6.1",
+    "sdr>=0.0.27",
+    "seaborn>=0.13.2",
+    "shap>=0.48.0",
+    "shapely>=2.0",
+    "sionna>=2.0.1",
+    "streamlit-folium>=0.27.4",
+    "xgboost==3.0.0",
 ]
 pulse-shaping = [
     "plotly>=6.0.1",

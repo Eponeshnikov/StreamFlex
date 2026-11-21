@@ -1,0 +1,243 @@
+{
+ "version": 2,
+ "_comment": [
+  "Parked-car layouts for the CIR-Generator's Sionna Ray Tracing model",
+  "('Parked cars' -> 'Layout presets'). Selecting several presets merges",
+  "them left to right, so a wide table can be laid down first and a few",
+  "road classes corrected on top of it.",
+  "",
+  "A kerb now carries two numbers, because they answer two questions and",
+  "multiplying them into one is what used to line every arterial in a",
+  "render with cars:",
+  "",
+  "  'class_permission' -- P(a car may stand on this kerb at all), keyed",
+  "  by the OSM highway=* value. Measured, not guessed: OSM's",
+  "  parking:left/right/both schema states it per side, and the centre of",
+  "  Kazan gives service 0.58, residential 0.38, unclassified 0.18,",
+  "  tertiary 0.14, primary 0.08, secondary 0.03, links 0.00. A way that",
+  "  carries the tag itself overrides this entirely.",
+  "",
+  "  'class_density' -- how full an allowed kerb is. Near one in a city",
+  "  centre; this is the half the live 'density' slider multiplies.",
+  "",
+  "'orientation_mix' is P(parallel / perpendicular / diagonal) on an",
+  "allowed kerb, again overridden by the way's own",
+  "parking:<side>:orientation. Courtyards park in bays, streets park in a",
+  "line, and a bay is four times the metal per metre of kerb.",
+  "",
+  "The key '*' applies to every class in that table and is overridden by",
+  "an explicit entry. The live knobs (global density, both-sides",
+  "probability, seed, car cap, device clearance and the drawn zones) come",
+  "from the widgets and win over whatever a preset says.",
+  "",
+  "The FIRST preset is what an empty selection falls back to, so it has to",
+  "be the one that places no cars.",
+  "",
+  "Cars only exist on scenes built by pages/osm_scene, or on any scene",
+  "whose streets can be read off its geometry: the road centrelines come",
+  "from the scene's _osm.json sidecar or from derive_roads, and nothing",
+  "in a written Mitsuba scene can say where a street is."
+ ],
+ "presets": [
+  {
+   "name": "no_cars",
+   "label": "No parked cars",
+   "description": "Leaves the streets empty -- the scene as it was built.",
+   "settings": {
+    "class_density": {
+     "*": 0.0
+    }
+   }
+  },
+  {
+   "name": "city_centre",
+   "label": "City centre (OSM-measured kerbside parking)",
+   "description": "The default picture: courtyards and side streets nearly full, arterials all but empty, because that is what the city's own parking tags say.",
+   "settings": {
+    "class_permission": {
+     "residential": 0.38,
+     "living_street": 0.4,
+     "service": 0.58,
+     "unclassified": 0.18,
+     "tertiary": 0.14,
+     "tertiary_link": 0.05,
+     "secondary": 0.03,
+     "secondary_link": 0.0,
+     "primary": 0.08,
+     "primary_link": 0.0,
+     "pedestrian": 0.0,
+     "trunk": 0.0,
+     "trunk_link": 0.0,
+     "motorway": 0.0,
+     "motorway_link": 0.0
+    },
+    "class_density": {
+     "*": 0.85,
+     "residential": 0.92,
+     "living_street": 0.92,
+     "service": 0.9,
+     "unclassified": 0.88,
+     "pedestrian": 0.0,
+     "trunk": 0.0,
+     "trunk_link": 0.0,
+     "motorway": 0.0,
+     "motorway_link": 0.0
+    },
+    "both_sides_prob": 0.55,
+    "no_parking_prob": 0.06,
+    "slot_gap_m": 1.0,
+    "junction_clearance_m": 7.0
+   }
+  },
+  {
+   "name": "residential_night",
+   "label": "Residential, night (courtyards saturated)",
+   "description": "Everyone is home: every kerb that allows parking is full and more of them are parked on both sides. Through roads stay as empty as the daytime.",
+   "settings": {
+    "class_permission": {
+     "residential": 0.55,
+     "living_street": 0.6,
+     "service": 0.75,
+     "unclassified": 0.3,
+     "tertiary": 0.18,
+     "secondary": 0.04,
+     "primary": 0.08,
+     "pedestrian": 0.0,
+     "trunk": 0.0,
+     "motorway": 0.0
+    },
+    "class_density": {
+     "*": 1.0,
+     "pedestrian": 0.0,
+     "trunk": 0.0,
+     "motorway": 0.0
+    },
+    "both_sides_prob": 0.75,
+    "no_parking_prob": 0.02,
+    "slot_gap_m": 0.8
+   }
+  },
+  {
+   "name": "sparse",
+   "label": "Sparse (a few cars per street)",
+   "description": "An out-of-hours or suburban picture -- enough metal to matter, far from a continuous wall.",
+   "settings": {
+    "class_permission": {
+     "*": 0.0,
+     "residential": 0.3,
+     "living_street": 0.3,
+     "unclassified": 0.15,
+     "service": 0.35,
+     "tertiary": 0.1,
+     "secondary": 0.03
+    },
+    "class_density": {
+     "*": 0.35
+    },
+    "both_sides_prob": 0.15,
+    "no_parking_prob": 0.25,
+    "slot_gap_m": 2.5
+   }
+  },
+  {
+   "name": "courtyards_only",
+   "label": "Courtyards only (service ways)",
+   "description": "Cars in the yards behind the blocks and nowhere on the street grid. The courtyard aisle is two thirds of the vehicle ways in a Russian city centre and where most of the real cars stand.",
+   "settings": {
+    "class_permission": {
+     "*": 0.0,
+     "service": 0.8,
+     "living_street": 0.5
+    },
+    "class_density": {
+     "*": 0.95
+    },
+    "both_sides_prob": 0.6
+   }
+  },
+  {
+   "name": "bays",
+   "label": "Perpendicular bays",
+   "description": "Correction layer: parks in bays rather than a line wherever the street is wide enough to hold one. Four times the metal per metre of kerb, and broadside to the street.",
+   "settings": {
+    "orientation_mix": {
+     "parallel": 0.25,
+     "perpendicular": 0.6,
+     "diagonal": 0.15
+    }
+   }
+  },
+  {
+   "name": "parallel_only",
+   "label": "Parallel rows only",
+   "description": "Correction layer: no bays anywhere, whatever the class or the OSM tag would have drawn.",
+   "settings": {
+    "orientation_mix": {
+     "parallel": 1.0,
+     "perpendicular": 0.0,
+     "diagonal": 0.0
+    }
+   }
+  },
+  {
+   "name": "at_the_kerb",
+   "label": "At the kerb, not against the wall",
+   "description": "Correction layer: keeps the row at the edge of the carriageway instead of crossing the pavement to the facade. The older placement, kept for an ablation against it.",
+   "settings": {
+    "hug_facades": false
+   }
+  },
+  {
+   "name": "ignore_osm_parking",
+   "label": "Ignore the OSM parking tags",
+   "description": "Correction layer: decide every kerb from the class prior alone, even where the way states its own restriction. For a scene whose tags are sparse, or to ablate against them.",
+   "settings": {
+    "respect_osm_parking": false
+   }
+  },
+  {
+   "name": "one_side_only",
+   "label": "One side only (alternate-side rule)",
+   "description": "Never both kerbs of the same street; which side is drawn per way from the seed. Ways that state their own parking still follow what they state.",
+   "settings": {
+    "both_sides_prob": 0.0
+   }
+  },
+  {
+   "name": "both_sides_always",
+   "label": "Both sides always",
+   "description": "Every street that allows parking carries it on both kerbs.",
+   "settings": {
+    "both_sides_prob": 1.0
+   }
+  },
+  {
+   "name": "arterials_too",
+   "label": "Include arterials and trunk roads",
+   "description": "Adds kerbside parking to the classes that normally have none. Correction layer -- select it after a base preset, and note it is contrary to what the city's own tags say.",
+   "settings": {
+    "class_permission": {
+     "primary": 0.4,
+     "primary_link": 0.2,
+     "secondary": 0.4,
+     "trunk": 0.25,
+     "trunk_link": 0.1
+    },
+    "class_density": {
+     "primary": 0.7,
+     "secondary": 0.7,
+     "trunk": 0.6
+    }
+   }
+  },
+  {
+   "name": "no_bridges",
+   "label": "Skip bridges and tunnels",
+   "description": "Correction layer: keeps cars off decks and out of tunnels, where a kerb usually does not exist.",
+   "settings": {
+    "include_bridges": false,
+    "include_tunnels": false
+   }
+  }
+ ]
+}
