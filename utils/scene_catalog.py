@@ -2,9 +2,8 @@
 
 ``sionna-scenes/catalog.json`` says which scenes belong to a measurement
 (an indoor room or an outdoor campaign) and which are standalone models.
-It is presentation only: scene *paths* never change here, because a traced
-CIR is cached under the scene path string, and renaming a scene would
-orphan every entry already keyed by it.
+Catalog IDs stay stable when their XML files move. Pass the ID-derived
+path to code that caches a CIR, and use the asset path for filesystem I/O.
 """
 
 from __future__ import annotations
@@ -74,23 +73,31 @@ def entry_for(scene_name: str) -> dict | None:
     )
 
 
+def scene_selection_path(path: str) -> str:
+    """Keep the original scene value stored in snapshots and cache keys."""
+    entry = entry_for(path)
+    if entry and entry.get("asset_path"):
+        return os.path.join(SCENES_DIR, entry["path"])
+    return path
+
+
 def discover_scene_files(directory: str | Path) -> dict[str, str]:
-    """List selectable XMLs, keeping the stable path of migrated assets."""
+    """List scene IDs and their actual XML files."""
     root = Path(directory)
     if not root.is_dir():
         return {}
-    aliases = set()
+    scenes: dict[str, str] = {}
+    catalogued_assets = set()
     if os.path.abspath(root) == SCENES_DIR:
-        aliases = {
-            entry["asset_path"]
-            for key, entry in _catalog().items()
-            if entry.get("asset_path") and (root / key).is_file()
-        }
-    scenes = {}
+        for key, entry in _catalog().items():
+            asset = entry.get("asset_path")
+            if asset and (root / asset).is_file():
+                scenes[key] = str(root / asset)
+                catalogued_assets.add(asset)
 
     def add(path: Path) -> None:
         key = path.relative_to(root).as_posix()
-        if key not in aliases and path.is_file():
+        if key not in scenes and key not in catalogued_assets and path.is_file():
             scenes[key] = str(path)
 
     for current, directories, files in os.walk(root):

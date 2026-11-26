@@ -10,6 +10,7 @@ import numpy as np
 import plotly.graph_objects as go
 import streamlit as st
 
+from project_paths import resolve_project_path
 from utils.radiomap import get_object_color
 
 
@@ -98,8 +99,9 @@ def release_scene_memory() -> int:
 def scene_file_path(scene_name) -> str | None:
     """The XML a scene name stands for: a path as given, or a Sionna scene."""
     name = str(scene_name or "")
-    if os.path.isfile(name):
-        return name
+    path = resolve_project_path(os.path.abspath(name))
+    if path.is_file():
+        return str(path)
     import sionna.rt
 
     found = getattr(sionna.rt.scene, name, None)
@@ -137,7 +139,8 @@ def load_scene_file(scene_path: str, merge_shapes: bool = True):
     import mitsuba as mi
     from sionna.rt import load_scene
 
-    scene_dir = os.path.dirname(os.path.abspath(scene_path))
+    scene_path = str(resolve_project_path(os.path.abspath(scene_path)))
+    scene_dir = os.path.dirname(scene_path)
     with _SCENE_LOAD_LOCK:
         thread = mi.Thread.thread()
         old = thread.file_resolver()

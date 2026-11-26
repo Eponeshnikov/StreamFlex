@@ -199,6 +199,7 @@ tests/test_offline_keygen.py
 /configs/local_pages.toml
 !/configs/material_scattering.json
 !/configs/parked_cars.json
+!/configs/path_aliases.json
 
 # Локальные файлы AI-ассистентов и агентов: не часть программы.
 CLAUDE.md

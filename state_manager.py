@@ -7,6 +7,8 @@ from datetime import datetime
 import streamlit as st
 from loguru import logger
 
+from project_paths import resolve_project_path
+
 # Names reserved for the autosave. A leading underscore keeps them out of
 # `list_snapshots`, so they never show up in the manual snapshot picker.
 AUTOSAVE_NAME = "_autosave"
@@ -114,6 +116,8 @@ class StateManager:
         try:
             st.session_state["current_value"] = {}
             snapshot_path = self._snapshot_path(snapshot_name)
+            if not os.path.isfile(snapshot_path):
+                snapshot_path = resolve_project_path(os.path.abspath(snapshot_path))
             logger.debug("Attempting to load snapshot from: {}", snapshot_path)
 
             with open(snapshot_path, "rb") as f:
