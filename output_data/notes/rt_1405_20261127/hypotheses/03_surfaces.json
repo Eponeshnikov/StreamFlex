@@ -1,0 +1,361 @@
+{
+  "cad_tx_rod": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage"
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "tx_phase_center_m": [
+          -0.0126,
+          -0.0003,
+          0
+        ]
+      }
+    },
+    "reason": "Ось штыря CAD по десяти сечениям вместо центра AABB штыря с креплением.",
+    "eligible": true
+  },
+  "planar_shell": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "planar_slabs": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8
+      }
+    },
+    "reason": "Объединение самоперекрывающихся треугольников пола и потолка, неизменная площадь проекции 93.734 м².",
+    "eligible": true
+  },
+  "parquet12": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "planar_slabs": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ],
+        "editor_shape_1": {
+          "normal": [
+            0,
+            0,
+            1
+          ],
+          "stack": [
+            [
+              "wood",
+              0.012
+            ],
+            [
+              "concrete",
+              0.18
+            ]
+          ]
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8
+      }
+    },
+    "reason": "Деревянное покрытие 12 мм на несущем бетонном перекрытии 180 мм; примыкающие слои в одном BSDF.",
+    "eligible": true
+  },
+  "parquet18": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "planar_slabs": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ],
+        "editor_shape_1": {
+          "normal": [
+            0,
+            0,
+            1
+          ],
+          "stack": [
+            [
+              "wood",
+              0.018
+            ],
+            [
+              "concrete",
+              0.18
+            ]
+          ]
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8
+      }
+    },
+    "reason": "Паркет 18 мм и бетонное основание 180 мм, геометрический размер паркета является гипотезой.",
+    "eligible": true
+  },
+  "parquet24": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "planar_slabs": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ],
+        "editor_shape_1": {
+          "normal": [
+            0,
+            0,
+            1
+          ],
+          "stack": [
+            [
+              "wood",
+              0.024
+            ],
+            [
+              "concrete",
+              0.18
+            ]
+          ]
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8
+      }
+    },
+    "reason": "Паркет 24 мм, контроль неопределённости толщины видимого настила.",
+    "eligible": true
+  },
+  "plaster_ceiling": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "planar_slabs": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ],
+        "editor_shape_5": {
+          "normal": [
+            0,
+            0,
+            -1
+          ],
+          "stack": [
+            [
+              "plasterboard",
+              0.012
+            ],
+            [
+              "concrete",
+              0.18
+            ]
+          ]
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8
+      }
+    },
+    "reason": "Потолок с отделкой 12 мм над приборным отсчётом горизонта: этажное перекрытие, гипсовая поверхность.",
+    "eligible": true
+  },
+  "floor_ceiling_broadband": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "planar_slabs": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ],
+        "editor_shape_1": {
+          "normal": [
+            0,
+            0,
+            1
+          ],
+          "stack": [
+            [
+              "wood",
+              0.018
+            ],
+            [
+              "concrete",
+              0.18
+            ]
+          ]
+        },
+        "editor_shape_5": {
+          "normal": [
+            0,
+            0,
+            -1
+          ],
+          "stack": [
+            [
+              "plasterboard",
+              0.012
+            ],
+            [
+              "concrete",
+              0.18
+            ]
+          ]
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "frequency_anchors": 5
+      }
+    },
+    "reason": "Проверка интерференции пола и потолка с учётом дисперсии на пяти частотных опорах.",
+    "eligible": true
+  }
+}

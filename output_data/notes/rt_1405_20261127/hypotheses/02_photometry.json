@@ -1,0 +1,569 @@
+{
+  "window_rebate": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "frame_rebate_m": 0.006
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8
+      }
+    },
+    "reason": "Уступ 6 мм на видимой комнатной поверхности оконного профиля.",
+    "eligible": true
+  },
+  "glass_inset25": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "glass_inset_m": 0.025
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8
+      }
+    },
+    "reason": "Лицевая плоскость стекла в фальце на 25 мм от внутренней кромки профиля.",
+    "eligible": true
+  },
+  "glass_inset40": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "glass_inset_m": 0.04
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8
+      }
+    },
+    "reason": "Глубина установки стекла 40 мм при внешнем профиле 102.8 мм.",
+    "eligible": true
+  },
+  "closed_sash": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "sash_angle_deg": 0
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8
+      }
+    },
+    "reason": "Правая нижняя створка закрыта; тот же профиль/обвязка, что при открытии.",
+    "eligible": true
+  },
+  "open_sash": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "sash_angle_deg": 10
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8
+      }
+    },
+    "reason": "Геометрическое положение створки по снимкам после измерений, контроль 10° против 0°.",
+    "eligible": true
+  },
+  "partition_single": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "partition_single": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ],
+        "partition_south_inner": [
+          [
+            "brick",
+            0.11903
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8
+      }
+    },
+    "reason": "Один поверхностный эквивалент измеренной перегородки толщиной 119.03 мм.",
+    "eligible": true
+  },
+  "partition_finish": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "partition_single": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ],
+        "partition_south_inner": [
+          [
+            "plasterboard",
+            0.01
+          ],
+          [
+            "brick",
+            0.09903
+          ],
+          [
+            "plasterboard",
+            0.01
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8
+      }
+    },
+    "reason": "Отделка 10 мм с типовыми потерями гипсового листа и кладка 99 мм.",
+    "eligible": true
+  },
+  "partition_finish_5": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "partition_single": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ],
+        "partition_south_inner": [
+          [
+            "plasterboard",
+            0.005
+          ],
+          [
+            "brick",
+            0.10903
+          ],
+          [
+            "plasterboard",
+            0.005
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8
+      }
+    },
+    "reason": "Чувствительность к слою отделки 5 мм при неизменной общей толщине перегородки.",
+    "eligible": true
+  },
+  "phase_center_z_cross": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage"
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "rx_phase_center_m": [
+          0,
+          0,
+          0.080467
+        ]
+      }
+    },
+    "reason": "Положительный контроль высоты из документации другой ноябрьской расстановки.",
+    "eligible": false
+  },
+  "weak_scatter_equipment": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage"
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffuse": true,
+        "scattering": {
+          "m_equipment": 0.12,
+          "brick": 0.035
+        }
+      }
+    },
+    "reason": "Рассеяние аппаратных панелей: 1.44% мощности, 0.12% на стене.",
+    "eligible": true
+  },
+  "depth6_new": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage"
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 6
+      }
+    },
+    "reason": "Порядок путей 6 относительно 8 на новой проводящей геометрии с подвижной балкой.",
+    "eligible": true
+  },
+  "depth10_new": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage"
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 10
+      }
+    },
+    "reason": "Контроль потери высоких порядков на физическом материале: одинаковый бюджет.",
+    "eligible": true
+  },
+  "wideband3_wall": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "partition_single": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ],
+        "partition_south_inner": [
+          [
+            "plasterboard",
+            0.01
+          ],
+          [
+            "brick",
+            0.09903
+          ],
+          [
+            "plasterboard",
+            0.01
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "frequency_anchors": 3
+      }
+    },
+    "reason": "Взаимодействие частотной дисперсии и фазового набега в трёхслойной перегородке.",
+    "eligible": true
+  },
+  "wideband5_3pane": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage"
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "frequency_anchors": 5
+      }
+    },
+    "reason": "Когерентная интерференция в двух полостях окна, поле на пяти частотах.",
+    "eligible": true
+  }
+}

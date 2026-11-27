@@ -1,0 +1,210 @@
+{
+  "registered_ten": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true,
+        "chair_stack": "photo10_registered"
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true
+      }
+    },
+    "eligible": true,
+    "reason": "Поза стопки из двух независимых регистраций 26.11: −0.18/+0.13 м и −3°. Сравнение с архивным местом при одинаковых материале и числе стульев."
+  },
+  "registered_core": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true,
+        "chair_stack": "photo10_registered",
+        "chair_cushions": "plywood_core"
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true
+      }
+    },
+    "eligible": true,
+    "reason": "Поза стопки из двух независимых регистраций 26.11: −0.18/+0.13 м и −3°. Сравнение с архивным местом при одинаковых материале и числе стульев."
+  },
+  "registered_room": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true,
+        "chair_stack": "photo10_registered",
+        "chair_cushions": "plywood_core",
+        "tabletop_sheet": true,
+        "ceiling_lights": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ],
+        "editor_shape_2": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_10": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_13": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_16": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_19": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_22": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_24": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_26": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_28": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_30": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true
+      }
+    },
+    "eligible": true,
+    "reason": "Поза стопки из двух независимых регистраций 26.11: −0.18/+0.13 м и −3°. Сравнение с архивным местом при одинаковых материале и числе стульев."
+  }
+}

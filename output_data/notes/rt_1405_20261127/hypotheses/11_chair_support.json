@@ -1,0 +1,192 @@
+{
+  "seated_side": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8
+      }
+    },
+    "reason": "Запись 16–19 ноября помещает боковой экран на стул. Жёсткие контакты с CAD сиденьем и спинкой восстанавливают высоту и наклон при разных XY и yaw по полосам.",
+    "eligible": true
+  },
+  "seated_side_lit": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true
+      }
+    },
+    "reason": "Запись 16–19 ноября помещает боковой экран на стул. Жёсткие контакты с CAD сиденьем и спинкой восстанавливают высоту и наклон при разных XY и yaw по полосам.",
+    "eligible": true
+  },
+  "seated_yaw_lit": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true,
+        "high_screen_yaw_deg": -2.0
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true
+      }
+    },
+    "reason": "Запись 16–19 ноября помещает боковой экран на стул. Жёсткие контакты с CAD сиденьем и спинкой восстанавливают высоту и наклон при разных XY и yaw по полосам.",
+    "eligible": true
+  },
+  "seated_yaw_wide": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true,
+        "high_screen_yaw_deg": -2.0
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "frequency_anchors": 5,
+        "diffraction_lit_region": true
+      }
+    },
+    "reason": "Запись 16–19 ноября помещает боковой экран на стул. Жёсткие контакты с CAD сиденьем и спинкой восстанавливают высоту и наклон при разных XY и yaw по полосам.",
+    "eligible": true
+  },
+  "seated_quad_lit": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true,
+        "first_order_launches": 16,
+        "first_order_priority": true,
+        "first_order_cone_rad": 0.00035
+      }
+    },
+    "reason": "Запись 16–19 ноября помещает боковой экран на стул. Жёсткие контакты с CAD сиденьем и спинкой восстанавливают высоту и наклон при разных XY и yaw по полосам.",
+    "eligible": true
+  }
+}

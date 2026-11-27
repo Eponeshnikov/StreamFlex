@@ -1,0 +1,164 @@
+{
+  "seated_hash4": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true,
+        "specular_hash_size": 4000037
+      }
+    },
+    "eligible": true,
+    "reason": "Нативный хеш уникальных кандидатов, 4000037 ячеек. Независимый контроль на шести тренировочных позициях выявил зависимость исчезающих зеркальных путей от коллизий."
+  },
+  "seated_three_hash4": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true,
+        "specular_hash_size": 4000037
+      }
+    },
+    "eligible": true,
+    "reason": "Нативный хеш уникальных кандидатов, 4000037 ячеек. Независимый контроль на шести тренировочных позициях выявил зависимость исчезающих зеркальных путей от коллизий."
+  },
+  "ten_hash4": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true,
+        "chair_stack": "photo10"
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true,
+        "specular_hash_size": 4000037
+      }
+    },
+    "eligible": true,
+    "reason": "Нативный хеш уникальных кандидатов, 4000037 ячеек. Независимый контроль на шести тренировочных позициях выявил зависимость исчезающих зеркальных путей от коллизий."
+  },
+  "ten_hash16": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true,
+        "chair_stack": "photo10"
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true,
+        "specular_hash_size": 16000057
+      }
+    },
+    "eligible": true,
+    "reason": "Нативный хеш уникальных кандидатов, 16000057 ячеек. Независимый контроль на шести тренировочных позициях выявил зависимость исчезающих зеркальных путей от коллизий."
+  }
+}

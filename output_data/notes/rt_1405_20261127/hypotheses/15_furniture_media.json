@@ -1,0 +1,466 @@
+{
+  "seated_tables": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true,
+        "tabletop_sheet": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ],
+        "editor_shape_2": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_10": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_13": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_16": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_19": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_22": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_24": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_26": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_28": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_30": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true
+      }
+    },
+    "eligible": true,
+    "reason": "Раздельные геометрические контроли числа и оболочек стульев, а также 10 реальных столешниц ДСП толщиной 25 мм (в архиве 100 мм на каждое пересечение)."
+  },
+  "ten_tables": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true,
+        "chair_stack": "photo10",
+        "tabletop_sheet": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ],
+        "editor_shape_2": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_10": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_13": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_16": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_19": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_22": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_24": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_26": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_28": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_30": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true
+      }
+    },
+    "eligible": true,
+    "reason": "Раздельные геометрические контроли числа и оболочек стульев, а также 10 реальных столешниц ДСП толщиной 25 мм (в архиве 100 мм на каждое пересечение)."
+  },
+  "ten_core_tables": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true,
+        "chair_stack": "photo10",
+        "chair_cushions": "plywood_core",
+        "tabletop_sheet": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ],
+        "editor_shape_2": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_10": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_13": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_16": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_19": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_22": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_24": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_26": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_28": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_30": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true
+      }
+    },
+    "eligible": true,
+    "reason": "Раздельные геометрические контроли числа и оболочек стульев, а также 10 реальных столешниц ДСП толщиной 25 мм (в архиве 100 мм на каждое пересечение)."
+  },
+  "ten_core": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true,
+        "chair_stack": "photo10",
+        "chair_cushions": "plywood_core"
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true
+      }
+    },
+    "eligible": true,
+    "reason": "Раздельные геометрические контроли числа и оболочек стульев, а также 10 реальных столешниц ДСП толщиной 25 мм (в архиве 100 мм на каждое пересечение)."
+  },
+  "eighteen_core": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true,
+        "chair_cushions": "plywood_core"
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true
+      }
+    },
+    "eligible": true,
+    "reason": "Раздельные геометрические контроли числа и оболочек стульев, а также 10 реальных столешниц ДСП толщиной 25 мм (в архиве 100 мм на каждое пересечение)."
+  }
+}

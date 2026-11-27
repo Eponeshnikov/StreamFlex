@@ -1,0 +1,598 @@
+{
+  "tilt17": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true,
+        "chair_stack": "photo10",
+        "chair_cushions": "plywood_core",
+        "tabletop_sheet": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ],
+        "editor_shape_2": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_10": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_13": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_16": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_19": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_22": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_24": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_26": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_28": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_30": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true,
+        "utd_physical_distances": true,
+        "utd_pec_metals": true,
+        "specular_hash_size": 4000037,
+        "frequency_anchors": 17,
+        "tx_orientation": [
+          -0.05371172930323259,
+          0.09323722619458792,
+          0.0
+        ],
+        "rx_orientation": [
+          -0.702256931509007,
+          0.1366160176013937,
+          0.0
+        ]
+      }
+    },
+    "eligible": true,
+    "reason": "Поворот обеих вертикальных антенн по сфотографированным осям. Парный контроль pec_tables17 с 17 частотными опорами."
+  },
+  "wire_tilt17": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true,
+        "chair_stack": "photo10",
+        "chair_cushions": "plywood_core",
+        "tabletop_sheet": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ],
+        "editor_shape_2": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_10": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_13": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_16": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_19": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_22": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_24": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_26": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_28": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_30": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true,
+        "utd_physical_distances": true,
+        "utd_pec_metals": true,
+        "specular_hash_size": 4000037,
+        "frequency_anchors": 17,
+        "tx_orientation": [
+          -0.05371172930323259,
+          0.09323722619458792,
+          0.0
+        ],
+        "rx_orientation": [
+          -0.702256931509007,
+          0.1366160176013937,
+          0.0
+        ]
+      },
+      "antennas": {
+        "tx": {
+          "low": 0.06378562936170212,
+          "high": 0.024516884036637227
+        },
+        "rx": {
+          "low": 0.06027190550864495,
+          "high": 0.025354571887686063
+        }
+      }
+    },
+    "eligible": true,
+    "reason": "Тот же поворот и широкополосная диаграмма тонкого излучателя с резонансными длинами по отдельным S11/S22. Парный контроль pec_tables17 с 17 частотными опорами."
+  },
+  "rod_axis17": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true,
+        "chair_stack": "photo10",
+        "chair_cushions": "plywood_core",
+        "tabletop_sheet": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ],
+        "editor_shape_2": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_10": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_13": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_16": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_19": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_22": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_24": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_26": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_28": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_30": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true,
+        "utd_physical_distances": true,
+        "utd_pec_metals": true,
+        "specular_hash_size": 4000037,
+        "frequency_anchors": 17,
+        "tx_phase_center_m": [
+          -0.0126,
+          -0.0003,
+          0
+        ]
+      }
+    },
+    "eligible": true,
+    "reason": "Перенос точки питания Tx на ось CAD-корпуса излучателя (−12,6; −0,3; 0) мм. Парный контроль pec_tables17 с 17 частотными опорами."
+  },
+  "wire_axis17": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true,
+        "chair_stack": "photo10",
+        "chair_cushions": "plywood_core",
+        "tabletop_sheet": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ],
+        "editor_shape_2": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_10": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_13": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_16": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_19": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_22": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_24": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_26": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_28": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_30": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true,
+        "utd_physical_distances": true,
+        "utd_pec_metals": true,
+        "specular_hash_size": 4000037,
+        "frequency_anchors": 17,
+        "tx_orientation": [
+          -0.05371172930323259,
+          0.09323722619458792,
+          0.0
+        ],
+        "rx_orientation": [
+          -0.702256931509007,
+          0.1366160176013937,
+          0.0
+        ],
+        "tx_phase_center_m": [
+          -0.0126,
+          -0.0003,
+          0
+        ]
+      },
+      "antennas": {
+        "tx": {
+          "low": 0.06378562936170212,
+          "high": 0.024516884036637227
+        },
+        "rx": {
+          "low": 0.06027190550864495,
+          "high": 0.025354571887686063
+        }
+      }
+    },
+    "eligible": true,
+    "reason": "Совместная механическая привязка оси Tx, поворот и резонансная ДН обоих портов. Парный контроль pec_tables17 с 17 частотными опорами."
+  }
+}

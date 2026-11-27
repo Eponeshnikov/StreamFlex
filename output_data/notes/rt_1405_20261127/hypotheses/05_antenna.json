@@ -1,0 +1,254 @@
+{
+  "wire_two_resonances": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage"
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "frequency_anchors": 5
+      },
+      "antennas": {
+        "tx": {
+          "low": 0.06378562936170212,
+          "high": 0.024516884036637227
+        },
+        "rx": {
+          "low": 0.06027190550864495,
+          "high": 0.025354571887686063
+        }
+      }
+    },
+    "reason": "Нормированная ДН конечного вертикального диполя. Отдельные эквивалентные ветви двух диапазонов, номиналы по независимым минимумам S11/S22.",
+    "eligible": true
+  },
+  "wire_common_length": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage"
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "frequency_anchors": 5
+      },
+      "antennas": {
+        "tx": {
+          "length_m": 0.06378562936170212
+        },
+        "rx": {
+          "length_m": 0.06027190550864495
+        }
+      }
+    },
+    "reason": "Один нижнечастотный излучающий участок на оба диапазона, вверху электрическая длина больше волны. Контроль многолепестковой ДН.",
+    "eligible": true
+  },
+  "edge_wire_branches": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage"
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true,
+        "frequency_anchors": 5
+      },
+      "antennas": {
+        "tx": {
+          "low": 0.06378562936170212,
+          "high": 0.024516884036637227
+        },
+        "rx": {
+          "low": 0.06027190550864495,
+          "high": 0.025354571887686063
+        }
+      }
+    },
+    "reason": "Тонкопроводные вертикальные ДН в штатном поле решателя и UTD в освещённой зоне.",
+    "eligible": true
+  },
+  "covers_only": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "instrument_covers": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8
+      }
+    },
+    "reason": "Металл только верхних и боковых граней приборов, видимых на фото. Передние панели оставлены с потерями.",
+    "eligible": true
+  },
+  "edge_covers": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "instrument_covers": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true,
+        "frequency_anchors": 5
+      }
+    },
+    "reason": "Краевое поле между частотными опорами при восстановленных металлических крышках десяти приборов.",
+    "eligible": true
+  },
+  "edge_txrod": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage"
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true,
+        "tx_phase_center_m": [
+          -0.0126,
+          -0.0003,
+          0
+        ]
+      }
+    },
+    "reason": "Сочетание угловой зоны UTD с координатой излучающего стержня вместо центра корпуса.",
+    "eligible": true
+  }
+}

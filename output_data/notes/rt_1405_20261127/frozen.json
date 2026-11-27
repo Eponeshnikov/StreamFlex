@@ -1,0 +1,200 @@
+{
+  "name": "precise_tables17",
+  "config": {
+    "geometry": {
+      "copper_screen": true,
+      "wall_material": "itu_brick",
+      "window_glass_m": 0.004,
+      "window_infill": true,
+      "metal_hutches": true,
+      "positioner": "gantry_carriage",
+      "side_screen_on_chair": true,
+      "chair_stack": "photo10",
+      "chair_cushions": "plywood_core",
+      "tabletop_sheet": true
+    },
+    "layers": {
+      "editor_shape_102": [
+        [
+          "glass",
+          0.004
+        ],
+        [
+          "vacuum",
+          0.014
+        ],
+        [
+          "glass",
+          0.004
+        ]
+      ],
+      "editor_shape_2": {
+        "stack": [
+          [
+            "chipboard",
+            0.025
+          ]
+        ],
+        "reference": "center"
+      },
+      "editor_shape_10": {
+        "stack": [
+          [
+            "chipboard",
+            0.025
+          ]
+        ],
+        "reference": "center"
+      },
+      "editor_shape_13": {
+        "stack": [
+          [
+            "chipboard",
+            0.025
+          ]
+        ],
+        "reference": "center"
+      },
+      "editor_shape_16": {
+        "stack": [
+          [
+            "chipboard",
+            0.025
+          ]
+        ],
+        "reference": "center"
+      },
+      "editor_shape_19": {
+        "stack": [
+          [
+            "chipboard",
+            0.025
+          ]
+        ],
+        "reference": "center"
+      },
+      "editor_shape_22": {
+        "stack": [
+          [
+            "chipboard",
+            0.025
+          ]
+        ],
+        "reference": "center"
+      },
+      "editor_shape_24": {
+        "stack": [
+          [
+            "chipboard",
+            0.025
+          ]
+        ],
+        "reference": "center"
+      },
+      "editor_shape_26": {
+        "stack": [
+          [
+            "chipboard",
+            0.025
+          ]
+        ],
+        "reference": "center"
+      },
+      "editor_shape_28": {
+        "stack": [
+          [
+            "chipboard",
+            0.025
+          ]
+        ],
+        "reference": "center"
+      },
+      "editor_shape_30": {
+        "stack": [
+          [
+            "chipboard",
+            0.025
+          ]
+        ],
+        "reference": "center"
+      }
+    },
+    "solver": {
+      "samples": 2000000,
+      "buffer": 1000000,
+      "max_depth": 8,
+      "diffraction_lit_region": true,
+      "utd_physical_distances": true,
+      "utd_pec_metals": true,
+      "specular_hash_size": 4000037,
+      "frequency_anchors": 17,
+      "image_tolerance_m": 3e-05,
+      "seed_offset": 0
+    }
+  },
+  "stage": 1240,
+  "reason": "Допуск геометрического метода изображений 30 мкм вместо штатных 10 мм. Проверка различения соседних граней на 1–10 мм и устранения ложных повторных отражений до вычисления поля. Исходная физическая конфигурация pec_tables17.",
+  "calibration": "cable",
+  "loss": 0.5452377415955588,
+  "component_loss": 0.4561373400640594,
+  "robust_loss": 0.5127798211074522,
+  "fixed_window_loss": 0.472878838470172,
+  "evidence": "/home/fedora/work/PythonProjects/StreamFlex/output_data/notes/rt_1405_20261127/experiments/finalist_240_s0/precise_tables17_651ffb975321",
+  "numerically_stable": false,
+  "seed_discrepancy": {
+    "2-3GHz": [
+      0.4554256569312305,
+      0.31276371154104143
+    ],
+    "5.3-6.3GHz": [
+      0.6966987636341453,
+      0.2708415139554292
+    ]
+  },
+  "broadband_and_metal_edges_verified": true,
+  "native_image_precision_verified": true,
+  "paired_port_evidence": {
+    "loss": 0.5462906836204023,
+    "worst_difference_reciprocity": 0.8333512194099881,
+    "evidence": [
+      "/home/fedora/work/PythonProjects/StreamFlex/output_data/notes/rt_1405_20261127/port_validation/30438f545af0/0/port_score.json",
+      "/home/fedora/work/PythonProjects/StreamFlex/output_data/notes/rt_1405_20261127/port_validation/30438f545af0/104729/port_score.json"
+    ]
+  },
+  "selection_with_independent_excitations": false,
+  "selection_loss": 0.5567115551283365,
+  "verified_late_nlos_by_band": {
+    "2-3GHz": {
+      "confirmed_recall": 0.002460770670954314,
+      "confirmed_same_class_f1": 0.004011135054009404
+    },
+    "5.3-6.3GHz": {
+      "confirmed_recall": 0.0693688414925927,
+      "confirmed_same_class_f1": 0.1157706075172677
+    }
+  },
+  "causal_check": {
+    "post_f1_mean": 0.20932761744998654,
+    "worst_precursor_above_port_control_db": -0.6046984909683459,
+    "precursor_within_port_control": true
+  },
+  "spatial_track_loss": 0.7762360425138983,
+  "physical_reference_spatial_track_loss": 0.8057079056846747,
+  "repeat_evidence": "/home/fedora/work/PythonProjects/StreamFlex/output_data/notes/rt_1405_20261127/experiments/finalist_240_s104729/precise_tables17_d39b602b983d",
+  "decision_evidence": "/home/fedora/work/PythonProjects/StreamFlex/output_data/notes/rt_1405_20261127/finalist_comparisons/240/30438f545af0.json",
+  "decision_key": "30438f545af0",
+  "n_validation": 240,
+  "physical_reference_name": "utd_seated",
+  "physical_reference_loss": 0.6067880949046361,
+  "physical_reference_component_loss": 0.5171938404160008,
+  "worst_priority_f1_change_vs_reference": 0.09598738706357118,
+  "worst_priority_f1_change_vs_archive": 0.08385158885597868,
+  "paired_candidates": [
+    "0774965c6164",
+    "30438f545af0",
+    "7b4b76058fbd",
+    "88dda9c9712f"
+  ],
+  "frozen_at": "2026-11-27T09:53:43.645833+03:00",
+  "stop_reason": "user_requested_end_of_search"
+}

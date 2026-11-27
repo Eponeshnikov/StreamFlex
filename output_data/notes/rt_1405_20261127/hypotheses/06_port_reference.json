@@ -1,0 +1,220 @@
+{
+  "glass_reference_center": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage"
+      },
+      "layers": {
+        "editor_shape_102": {
+          "reference": "center",
+          "stack": [
+            [
+              "glass",
+              0.004
+            ],
+            [
+              "vacuum",
+              0.014
+            ],
+            [
+              "glass",
+              0.004
+            ]
+          ]
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8
+      }
+    },
+    "reason": "Перенос портов многослойного стеклопакета на среднюю CAD-плоскость для исключения повторного оптического пути в воздухе.",
+    "eligible": true
+  },
+  "edge_reference_center": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage"
+      },
+      "layers": {
+        "editor_shape_102": {
+          "reference": "center",
+          "stack": [
+            [
+              "glass",
+              0.004
+            ],
+            [
+              "vacuum",
+              0.014
+            ],
+            [
+              "glass",
+              0.004
+            ]
+          ]
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true,
+        "frequency_anchors": 3
+      }
+    },
+    "reason": "Опорная срединная плоскость стеклопакета в освещённой зоне UTD.",
+    "eligible": true
+  },
+  "edge_slab_surfaces": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "planar_slabs": true,
+        "partition_single": true
+      },
+      "layers": {
+        "editor_shape_102": {
+          "reference": "center",
+          "stack": [
+            [
+              "glass",
+              0.004
+            ],
+            [
+              "vacuum",
+              0.014
+            ],
+            [
+              "glass",
+              0.004
+            ]
+          ]
+        },
+        "editor_shape_1": {
+          "reference": "front",
+          "normal": [
+            0,
+            0,
+            1
+          ],
+          "stack": [
+            [
+              "wood",
+              0.018
+            ],
+            [
+              "concrete",
+              0.18
+            ]
+          ]
+        },
+        "partition_south_inner": {
+          "reference": "front",
+          "normal": [
+            0,
+            1,
+            0
+          ],
+          "stack": [
+            [
+              "plasterboard",
+              0.01
+            ],
+            [
+              "brick",
+              0.09903
+            ],
+            [
+              "plasterboard",
+              0.01
+            ]
+          ]
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true,
+        "frequency_anchors": 5
+      }
+    },
+    "reason": "Однократные поверхности паркета, перегородки и стеклопакета с приведением входного и выходного поля к физической координате каждой грани.",
+    "eligible": true
+  },
+  "floor_surface": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "planar_slabs": true
+      },
+      "layers": {
+        "editor_shape_102": {
+          "reference": "center",
+          "stack": [
+            [
+              "glass",
+              0.004
+            ],
+            [
+              "vacuum",
+              0.014
+            ],
+            [
+              "glass",
+              0.004
+            ]
+          ]
+        },
+        "editor_shape_1": {
+          "reference": "front",
+          "normal": [
+            0,
+            0,
+            1
+          ],
+          "stack": [
+            [
+              "wood",
+              0.018
+            ],
+            [
+              "concrete",
+              0.18
+            ]
+          ]
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "frequency_anchors": 5
+      }
+    },
+    "reason": "Опорная грань паркета на его лицевой поверхности, широкополосный расчёт отражения и прохождения.",
+    "eligible": true
+  }
+}

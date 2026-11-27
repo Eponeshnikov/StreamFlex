@@ -1,0 +1,602 @@
+{
+  "rod_early17": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true,
+        "chair_stack": "photo10",
+        "chair_cushions": "plywood_core",
+        "tabletop_sheet": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ],
+        "editor_shape_2": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_10": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_13": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_16": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_19": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_22": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_24": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_26": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_28": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_30": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true,
+        "utd_physical_distances": true,
+        "utd_pec_metals": true,
+        "specular_hash_size": 4000037,
+        "frequency_anchors": 17,
+        "image_tolerance_m": 3e-05,
+        "tx_orientation": [
+          0.05,
+          0.089,
+          0
+        ],
+        "rx_orientation": [
+          -1.5707963267948966,
+          0.054,
+          0
+        ]
+      }
+    },
+    "eligible": true,
+    "reason": "Оси обеих антенн по ранним снимкам, независимо ориентированным по направляющим. Контроль precise_tables17."
+  },
+  "rod_late17": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true,
+        "chair_stack": "photo10",
+        "chair_cushions": "plywood_core",
+        "tabletop_sheet": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ],
+        "editor_shape_2": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_10": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_13": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_16": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_19": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_22": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_24": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_26": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_28": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_30": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true,
+        "utd_physical_distances": true,
+        "utd_pec_metals": true,
+        "specular_hash_size": 4000037,
+        "frequency_anchors": 17,
+        "image_tolerance_m": 3e-05,
+        "tx_orientation": [
+          0.05,
+          0.089,
+          0
+        ],
+        "rx_orientation": [
+          -1.725,
+          0.119,
+          0
+        ]
+      }
+    },
+    "eligible": true,
+    "reason": "Оси по более поздней группе снимков; наклон подвижной антенны больше. Контроль precise_tables17."
+  },
+  "rod_collar17": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true,
+        "chair_stack": "photo10",
+        "chair_cushions": "plywood_core",
+        "tabletop_sheet": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ],
+        "editor_shape_2": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_10": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_13": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_16": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_19": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_22": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_24": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_26": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_28": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_30": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true,
+        "utd_physical_distances": true,
+        "utd_pec_metals": true,
+        "specular_hash_size": 4000037,
+        "frequency_anchors": 17,
+        "image_tolerance_m": 3e-05,
+        "tx_orientation": [
+          0.05,
+          0.089,
+          0
+        ],
+        "rx_orientation": [
+          -1.5707963267948966,
+          0.054,
+          0
+        ],
+        "tx_phase_center_m": [
+          -0.0126,
+          -0.0003,
+          0.044
+        ],
+        "rx_phase_center_m": [
+          0,
+          0,
+          0.026
+        ]
+      }
+    },
+    "eligible": true,
+    "reason": "Тест общего фазового начала около стыка металлической горловины и диэлектрического корпуса. Высоты 1,044/1,096 м ограничены фотограмметрией. Положение электрического фазового центра неизвестно. Контроль precise_tables17."
+  },
+  "rod_inside17": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true,
+        "chair_stack": "photo10",
+        "chair_cushions": "plywood_core",
+        "tabletop_sheet": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ],
+        "editor_shape_2": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_10": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_13": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_16": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_19": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_22": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_24": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_26": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_28": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_30": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true,
+        "utd_physical_distances": true,
+        "utd_pec_metals": true,
+        "specular_hash_size": 4000037,
+        "frequency_anchors": 17,
+        "image_tolerance_m": 3e-05,
+        "tx_orientation": [
+          0.05,
+          0.089,
+          0
+        ],
+        "rx_orientation": [
+          -1.5707963267948966,
+          0.054,
+          0
+        ],
+        "tx_phase_center_m": [
+          -0.0126,
+          -0.0003,
+          0.076
+        ],
+        "rx_phase_center_m": [
+          0,
+          0,
+          0.056
+        ]
+      }
+    },
+    "eligible": true,
+    "reason": "Проверка совместного центра двух резонансных режимов внутри кожуха: над нижней кромкой отложена половина длины низкочастотного дипольного излучателя из независимого S11/S22. Устройство под кожухом не установлено. Контроль precise_tables17."
+  }
+}

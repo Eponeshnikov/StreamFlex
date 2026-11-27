@@ -1,0 +1,150 @@
+{
+  "photo_rod_tilt": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage"
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "tx_orientation": [
+          -0.05371172930323259,
+          0.09323722619458792,
+          0.0
+        ],
+        "rx_orientation": [
+          -0.702256931509007,
+          0.1366160176013937,
+          0.0
+        ]
+      }
+    },
+    "reason": "Две оси обтекателей из независимой SfM по фотографиям после эксперимента.",
+    "eligible": true
+  },
+  "edge_rod_tilt": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage"
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true,
+        "tx_orientation": [
+          -0.05371172930323259,
+          0.09323722619458792,
+          0.0
+        ],
+        "rx_orientation": [
+          -0.702256931509007,
+          0.1366160176013937,
+          0.0
+        ]
+      }
+    },
+    "reason": "Раздельные оси штырей из SfM при освещённой зоне UTD.",
+    "eligible": true
+  },
+  "edge_wire_tilt": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage"
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true,
+        "frequency_anchors": 5,
+        "tx_orientation": [
+          -0.05371172930323259,
+          0.09323722619458792,
+          0.0
+        ],
+        "rx_orientation": [
+          -0.702256931509007,
+          0.1366160176013937,
+          0.0
+        ]
+      },
+      "antennas": {
+        "tx": {
+          "low": 0.06378562936170212,
+          "high": 0.024516884036637227
+        },
+        "rx": {
+          "low": 0.06027190550864495,
+          "high": 0.025354571887686063
+        }
+      }
+    },
+    "reason": "Раздельные наклоны Tx и Rx плюс ДН тонкого диполя с частотной зависимостью.",
+    "eligible": true
+  }
+}

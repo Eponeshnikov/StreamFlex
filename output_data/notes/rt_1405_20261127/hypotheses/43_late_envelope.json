@@ -1,0 +1,674 @@
+{
+  "late_envelope_control17": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true,
+        "chair_stack": "photo10",
+        "chair_cushions": "plywood_core",
+        "tabletop_sheet": true,
+        "planar_slabs": true
+      },
+      "layers": {
+        "editor_shape_102": {
+          "reference": "center",
+          "stack": [
+            [
+              {
+                "cole_cole": "glass"
+              },
+              0.004
+            ],
+            [
+              "vacuum",
+              0.014
+            ],
+            [
+              {
+                "cole_cole": "glass"
+              },
+              0.004
+            ]
+          ],
+          "normal": [
+            1,
+            0,
+            0
+          ]
+        },
+        "editor_shape_2": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_10": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_13": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_16": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_19": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_22": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_24": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_26": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_28": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_30": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_5": {
+          "normal": [
+            0,
+            0,
+            -1
+          ],
+          "reference": "front",
+          "stack": [
+            [
+              "concrete",
+              0.1
+            ]
+          ]
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true,
+        "utd_physical_distances": true,
+        "utd_pec_metals": true,
+        "specular_hash_size": 4000037,
+        "frequency_anchors": 17,
+        "image_tolerance_m": 3e-05
+      }
+    },
+    "eligible": true,
+    "reason": "Факторная проверка двух независимо мотивированных поверхностей для зарегистрированных фронтов NLOS 62,6 и 68 нс. Межстекольное FTO 12,4 Ом/квадрат, наружный слой потолка 10 мм гипсовой штукатурки. В парном контроле сохраняются плоскости, сетки, источник Cole–Cole стекла и общая толщина потолочной конструкции 100 мм. Наличие покрытия оптически не установлено."
+  },
+  "late_fto17": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true,
+        "chair_stack": "photo10",
+        "chair_cushions": "plywood_core",
+        "tabletop_sheet": true,
+        "planar_slabs": true
+      },
+      "layers": {
+        "editor_shape_102": {
+          "reference": "center",
+          "stack": [
+            [
+              {
+                "cole_cole": "glass"
+              },
+              0.004
+            ],
+            [
+              {
+                "sheet_resistance_ohm": 12.4
+              },
+              3.3e-07
+            ],
+            [
+              "vacuum",
+              0.014
+            ],
+            [
+              {
+                "cole_cole": "glass"
+              },
+              0.004
+            ]
+          ],
+          "normal": [
+            1,
+            0,
+            0
+          ]
+        },
+        "editor_shape_2": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_10": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_13": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_16": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_19": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_22": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_24": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_26": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_28": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_30": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_5": {
+          "normal": [
+            0,
+            0,
+            -1
+          ],
+          "reference": "front",
+          "stack": [
+            [
+              "concrete",
+              0.1
+            ]
+          ]
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true,
+        "utd_physical_distances": true,
+        "utd_pec_metals": true,
+        "specular_hash_size": 4000037,
+        "frequency_anchors": 17,
+        "image_tolerance_m": 3e-05
+      }
+    },
+    "eligible": true,
+    "reason": "Факторная проверка двух независимо мотивированных поверхностей для зарегистрированных фронтов NLOS 62,6 и 68 нс. Межстекольное FTO 12,4 Ом/квадрат, наружный слой потолка 10 мм гипсовой штукатурки. В парном контроле сохраняются плоскости, сетки, источник Cole–Cole стекла и общая толщина потолочной конструкции 100 мм. Наличие покрытия оптически не установлено."
+  },
+  "late_ceiling10_17": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true,
+        "chair_stack": "photo10",
+        "chair_cushions": "plywood_core",
+        "tabletop_sheet": true,
+        "planar_slabs": true
+      },
+      "layers": {
+        "editor_shape_102": {
+          "reference": "center",
+          "stack": [
+            [
+              {
+                "cole_cole": "glass"
+              },
+              0.004
+            ],
+            [
+              "vacuum",
+              0.014
+            ],
+            [
+              {
+                "cole_cole": "glass"
+              },
+              0.004
+            ]
+          ],
+          "normal": [
+            1,
+            0,
+            0
+          ]
+        },
+        "editor_shape_2": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_10": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_13": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_16": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_19": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_22": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_24": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_26": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_28": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_30": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_5": {
+          "normal": [
+            0,
+            0,
+            -1
+          ],
+          "reference": "front",
+          "stack": [
+            [
+              {
+                "cole_cole": "gypsum_plaster"
+              },
+              0.01
+            ],
+            [
+              "concrete",
+              0.09000000000000001
+            ]
+          ]
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true,
+        "utd_physical_distances": true,
+        "utd_pec_metals": true,
+        "specular_hash_size": 4000037,
+        "frequency_anchors": 17,
+        "image_tolerance_m": 3e-05
+      }
+    },
+    "eligible": true,
+    "reason": "Факторная проверка двух независимо мотивированных поверхностей для зарегистрированных фронтов NLOS 62,6 и 68 нс. Межстекольное FTO 12,4 Ом/квадрат, наружный слой потолка 10 мм гипсовой штукатурки. В парном контроле сохраняются плоскости, сетки, источник Cole–Cole стекла и общая толщина потолочной конструкции 100 мм. Наличие покрытия оптически не установлено."
+  },
+  "late_fto_ceiling17": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true,
+        "chair_stack": "photo10",
+        "chair_cushions": "plywood_core",
+        "tabletop_sheet": true,
+        "planar_slabs": true
+      },
+      "layers": {
+        "editor_shape_102": {
+          "reference": "center",
+          "stack": [
+            [
+              {
+                "cole_cole": "glass"
+              },
+              0.004
+            ],
+            [
+              {
+                "sheet_resistance_ohm": 12.4
+              },
+              3.3e-07
+            ],
+            [
+              "vacuum",
+              0.014
+            ],
+            [
+              {
+                "cole_cole": "glass"
+              },
+              0.004
+            ]
+          ],
+          "normal": [
+            1,
+            0,
+            0
+          ]
+        },
+        "editor_shape_2": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_10": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_13": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_16": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_19": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_22": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_24": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_26": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_28": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_30": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_5": {
+          "normal": [
+            0,
+            0,
+            -1
+          ],
+          "reference": "front",
+          "stack": [
+            [
+              {
+                "cole_cole": "gypsum_plaster"
+              },
+              0.01
+            ],
+            [
+              "concrete",
+              0.09000000000000001
+            ]
+          ]
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true,
+        "utd_physical_distances": true,
+        "utd_pec_metals": true,
+        "specular_hash_size": 4000037,
+        "frequency_anchors": 17,
+        "image_tolerance_m": 3e-05
+      }
+    },
+    "eligible": true,
+    "reason": "Факторная проверка двух независимо мотивированных поверхностей для зарегистрированных фронтов NLOS 62,6 и 68 нс. Межстекольное FTO 12,4 Ом/квадрат, наружный слой потолка 10 мм гипсовой штукатурки. В парном контроле сохраняются плоскости, сетки, источник Cole–Cole стекла и общая толщина потолочной конструкции 100 мм. Наличие покрытия оптически не установлено."
+  }
+}

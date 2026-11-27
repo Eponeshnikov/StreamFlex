@@ -1,0 +1,53 @@
+{
+  "low_e_glass": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage"
+      },
+      "layers": {
+        "editor_shape_102": {
+          "reference": "center",
+          "normal": [
+            1,
+            0,
+            0
+          ],
+          "stack": [
+            [
+              "glass",
+              0.004
+            ],
+            [
+              {
+                "sheet_resistance_ohm": 12.4
+              },
+              3.3e-07
+            ],
+            [
+              "vacuum",
+              0.014
+            ],
+            [
+              "glass",
+              0.004
+            ]
+          ]
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "frequency_anchors": 5,
+        "diffraction_lit_region": true
+      }
+    },
+    "eligible": true,
+    "reason": "Широкополосная проверка возможного теплозащитного покрытия на обращённой в полость стороне стекла. 12.4 Ом/квадрат и 330 нм взяты с измеренного коммерческого FTO-образца. Наличие такого покрытия в 1405 неизвестно."
+  }
+}

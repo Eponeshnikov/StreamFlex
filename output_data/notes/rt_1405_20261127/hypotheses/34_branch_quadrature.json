@@ -1,0 +1,589 @@
+{
+  "beam64_control17": {
+    "eligible": true,
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true,
+        "chair_stack": "photo10",
+        "chair_cushions": "plywood_core",
+        "tabletop_sheet": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ],
+        "editor_shape_2": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_10": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_13": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_16": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_19": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_22": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_24": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_26": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_28": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_30": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true,
+        "utd_physical_distances": true,
+        "utd_pec_metals": true,
+        "specular_hash_size": 4000037,
+        "frequency_anchors": 17,
+        "image_tolerance_m": 3e-05,
+        "beam_order": 6,
+        "beam_min_area_m2": 4.0,
+        "beam_launches": 64,
+        "first_order_launches": 16,
+        "first_order_priority": true,
+        "first_order_cone_rad": 0.00035,
+        "second_order_launches": 16,
+        "second_order_min_area_m2": 0.075,
+        "diffuse": false
+      }
+    },
+    "reason": "Проверка зеркальных ветвлений порядков 3–6 на общих координатах при 64 повторах геометрических направлений. Сравнительный нативный генератор ветвей. Контроль геометрии beam_tables17."
+  },
+  "grid8_tables17": {
+    "eligible": true,
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true,
+        "chair_stack": "photo10",
+        "chair_cushions": "plywood_core",
+        "tabletop_sheet": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ],
+        "editor_shape_2": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_10": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_13": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_16": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_19": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_22": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_24": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_26": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_28": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_30": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true,
+        "utd_physical_distances": true,
+        "utd_pec_metals": true,
+        "specular_hash_size": 4000037,
+        "frequency_anchors": 17,
+        "image_tolerance_m": 3e-05,
+        "beam_order": 6,
+        "beam_min_area_m2": 4.0,
+        "beam_launches": 64,
+        "first_order_launches": 16,
+        "first_order_priority": true,
+        "first_order_cone_rad": 0.00035,
+        "second_order_launches": 16,
+        "second_order_min_area_m2": 0.075,
+        "diffuse": false,
+        "branch_grid_repeats": 8
+      }
+    },
+    "reason": "Проверка зеркальных ветвлений порядков 3–6 на общих координатах при 64 повторах геометрических направлений. Восемь координат внутреннего генератора ветвей SBR; материалы и нативный расчёт коэффициентов без изменений. Контроль геометрии beam_tables17."
+  },
+  "grid8_glass17": {
+    "eligible": true,
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true,
+        "chair_stack": "photo10",
+        "chair_cushions": "plywood_core",
+        "tabletop_sheet": true
+      },
+      "layers": {
+        "editor_shape_102": {
+          "reference": "center",
+          "stack": [
+            [
+              {
+                "cole_cole": "glass"
+              },
+              0.004
+            ],
+            [
+              "vacuum",
+              0.014
+            ],
+            [
+              {
+                "cole_cole": "glass"
+              },
+              0.004
+            ]
+          ]
+        },
+        "editor_shape_2": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_10": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_13": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_16": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_19": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_22": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_24": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_26": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_28": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_30": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true,
+        "utd_physical_distances": true,
+        "utd_pec_metals": true,
+        "specular_hash_size": 4000037,
+        "frequency_anchors": 17,
+        "image_tolerance_m": 3e-05,
+        "beam_order": 6,
+        "beam_min_area_m2": 4.0,
+        "beam_launches": 64,
+        "first_order_launches": 16,
+        "first_order_priority": true,
+        "first_order_cone_rad": 0.00035,
+        "second_order_launches": 16,
+        "second_order_min_area_m2": 0.075,
+        "diffuse": false,
+        "branch_grid_repeats": 8
+      }
+    },
+    "reason": "Проверка зеркальных ветвлений порядков 3–6 на общих координатах при 64 повторах геометрических направлений. Восемь координат внутреннего генератора ветвей SBR; материалы и нативный расчёт коэффициентов без изменений. Контроль геометрии precise_glass17."
+  },
+  "grid8_yaw17": {
+    "eligible": true,
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true,
+        "chair_stack": "photo10",
+        "chair_cushions": "plywood_core",
+        "tabletop_sheet": true,
+        "high_screen_yaw_deg": -2.0
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ],
+        "editor_shape_2": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_10": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_13": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_16": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_19": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_22": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_24": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_26": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_28": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_30": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true,
+        "utd_physical_distances": true,
+        "utd_pec_metals": true,
+        "specular_hash_size": 4000037,
+        "frequency_anchors": 17,
+        "image_tolerance_m": 3e-05,
+        "beam_order": 6,
+        "beam_min_area_m2": 4.0,
+        "beam_launches": 64,
+        "first_order_launches": 16,
+        "first_order_priority": true,
+        "first_order_cone_rad": 0.00035,
+        "second_order_launches": 16,
+        "second_order_min_area_m2": 0.075,
+        "diffuse": false,
+        "branch_grid_repeats": 8
+      }
+    },
+    "reason": "Проверка зеркальных ветвлений порядков 3–6 на общих координатах при 64 повторах геометрических направлений. Восемь координат внутреннего генератора ветвей SBR; материалы и нативный расчёт коэффициентов без изменений. Контроль геометрии beam_yaw17."
+  }
+}

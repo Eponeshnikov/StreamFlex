@@ -1,0 +1,608 @@
+{
+  "cole_glass": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true,
+        "chair_stack": "photo10",
+        "chair_cushions": "plywood_core",
+        "tabletop_sheet": true
+      },
+      "layers": {
+        "editor_shape_102": {
+          "reference": "center",
+          "stack": [
+            [
+              {
+                "cole_cole": "glass"
+              },
+              0.004
+            ],
+            [
+              "vacuum",
+              0.014
+            ],
+            [
+              {
+                "cole_cole": "glass"
+              },
+              0.004
+            ]
+          ]
+        },
+        "editor_shape_2": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_10": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_13": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_16": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_19": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_22": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_24": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_26": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_28": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_30": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true,
+        "utd_physical_distances": true,
+        "utd_pec_metals": true,
+        "specular_hash_size": 4000037,
+        "frequency_anchors": 17
+      }
+    },
+    "eligible": true,
+    "reason": "Вместо усреднённой ITU-кривой A/B с независимо измеренной комплексной дисперсией Cole–Cole образцов строительных материалов (Zhekov et al. 2020, таблица II). Одинаковая физическая кривая в обеих полосах; принадлежность материала 1405 к конкретному образцу не подтверждена."
+  },
+  "cole_desk": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true,
+        "chair_stack": "photo10",
+        "chair_cushions": "plywood_core",
+        "tabletop_sheet": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ],
+        "editor_shape_2": {
+          "stack": [
+            [
+              {
+                "cole_cole": "chipboard_veneer"
+              },
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_10": {
+          "stack": [
+            [
+              {
+                "cole_cole": "chipboard_veneer"
+              },
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_13": {
+          "stack": [
+            [
+              {
+                "cole_cole": "chipboard_veneer"
+              },
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_16": {
+          "stack": [
+            [
+              {
+                "cole_cole": "chipboard_veneer"
+              },
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_19": {
+          "stack": [
+            [
+              {
+                "cole_cole": "chipboard_veneer"
+              },
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_22": {
+          "stack": [
+            [
+              {
+                "cole_cole": "chipboard_veneer"
+              },
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_24": {
+          "stack": [
+            [
+              {
+                "cole_cole": "chipboard_veneer"
+              },
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_26": {
+          "stack": [
+            [
+              {
+                "cole_cole": "chipboard_veneer"
+              },
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_28": {
+          "stack": [
+            [
+              {
+                "cole_cole": "chipboard_veneer"
+              },
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_30": {
+          "stack": [
+            [
+              {
+                "cole_cole": "chipboard_veneer"
+              },
+              0.025
+            ]
+          ],
+          "reference": "center"
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true,
+        "utd_physical_distances": true,
+        "utd_pec_metals": true,
+        "specular_hash_size": 4000037,
+        "frequency_anchors": 17
+      }
+    },
+    "eligible": true,
+    "reason": "Вместо усреднённой ITU-кривой A/B с независимо измеренной комплексной дисперсией Cole–Cole образцов строительных материалов (Zhekov et al. 2020, таблица II). Одинаковая физическая кривая в обеих полосах; принадлежность материала 1405 к конкретному образцу не подтверждена."
+  },
+  "cole_brick_core": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true,
+        "chair_stack": "photo10",
+        "chair_cushions": "plywood_core",
+        "tabletop_sheet": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ],
+        "editor_shape_2": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_10": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_13": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_16": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_19": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_22": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_24": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_26": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_28": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_30": {
+          "stack": [
+            [
+              "chipboard",
+              0.025
+            ]
+          ],
+          "reference": "center"
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true,
+        "utd_physical_distances": true,
+        "utd_pec_metals": true,
+        "specular_hash_size": 4000037,
+        "frequency_anchors": 17
+      },
+      "material_overrides": {
+        "brick": {
+          "cole_cole": "red_brick"
+        },
+        "stack_chair_plywood": {
+          "cole_cole": "plywood_5"
+        }
+      }
+    },
+    "eligible": true,
+    "reason": "Вместо усреднённой ITU-кривой A/B с независимо измеренной комплексной дисперсией Cole–Cole образцов строительных материалов (Zhekov et al. 2020, таблица II). Одинаковая физическая кривая в обеих полосах; принадлежность материала 1405 к конкретному образцу не подтверждена."
+  },
+  "cole_room": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true,
+        "chair_stack": "photo10",
+        "chair_cushions": "plywood_core",
+        "tabletop_sheet": true
+      },
+      "layers": {
+        "editor_shape_102": {
+          "reference": "center",
+          "stack": [
+            [
+              {
+                "cole_cole": "glass"
+              },
+              0.004
+            ],
+            [
+              "vacuum",
+              0.014
+            ],
+            [
+              {
+                "cole_cole": "glass"
+              },
+              0.004
+            ]
+          ]
+        },
+        "editor_shape_2": {
+          "stack": [
+            [
+              {
+                "cole_cole": "chipboard_veneer"
+              },
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_10": {
+          "stack": [
+            [
+              {
+                "cole_cole": "chipboard_veneer"
+              },
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_13": {
+          "stack": [
+            [
+              {
+                "cole_cole": "chipboard_veneer"
+              },
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_16": {
+          "stack": [
+            [
+              {
+                "cole_cole": "chipboard_veneer"
+              },
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_19": {
+          "stack": [
+            [
+              {
+                "cole_cole": "chipboard_veneer"
+              },
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_22": {
+          "stack": [
+            [
+              {
+                "cole_cole": "chipboard_veneer"
+              },
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_24": {
+          "stack": [
+            [
+              {
+                "cole_cole": "chipboard_veneer"
+              },
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_26": {
+          "stack": [
+            [
+              {
+                "cole_cole": "chipboard_veneer"
+              },
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_28": {
+          "stack": [
+            [
+              {
+                "cole_cole": "chipboard_veneer"
+              },
+              0.025
+            ]
+          ],
+          "reference": "center"
+        },
+        "editor_shape_30": {
+          "stack": [
+            [
+              {
+                "cole_cole": "chipboard_veneer"
+              },
+              0.025
+            ]
+          ],
+          "reference": "center"
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true,
+        "utd_physical_distances": true,
+        "utd_pec_metals": true,
+        "specular_hash_size": 4000037,
+        "frequency_anchors": 17
+      },
+      "material_overrides": {
+        "brick": {
+          "cole_cole": "red_brick"
+        },
+        "stack_chair_plywood": {
+          "cole_cole": "plywood_5"
+        }
+      }
+    },
+    "eligible": true,
+    "reason": "Вместо усреднённой ITU-кривой A/B с независимо измеренной комплексной дисперсией Cole–Cole образцов строительных материалов (Zhekov et al. 2020, таблица II). Одинаковая физическая кривая в обеих полосах; принадлежность материала 1405 к конкретному образцу не подтверждена."
+  }
+}

@@ -1,0 +1,401 @@
+{
+  "seated_three": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true
+      }
+    },
+    "eligible": true,
+    "reason": "Проверка совместного влияния опоры боковой пластины и второго воздушного промежутка окна."
+  },
+  "seated_parquet": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "planar_slabs": true,
+        "side_screen_on_chair": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ],
+        "editor_shape_1": {
+          "normal": [
+            0,
+            0,
+            1
+          ],
+          "stack": [
+            [
+              "wood",
+              0.018
+            ],
+            [
+              "concrete",
+              0.18
+            ]
+          ]
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true
+      }
+    },
+    "eligible": true,
+    "reason": "Ранний приход полос NLOS содержит отражение от паркета и примесь прямого обхода экрана. Проверка слоистого пола на опорной геометрии."
+  },
+  "seated_center_slabs": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "planar_slabs": true,
+        "partition_single": true,
+        "side_screen_on_chair": true
+      },
+      "layers": {
+        "editor_shape_102": {
+          "reference": "center",
+          "stack": [
+            [
+              "glass",
+              0.004
+            ],
+            [
+              "vacuum",
+              0.014
+            ],
+            [
+              "glass",
+              0.004
+            ]
+          ]
+        },
+        "editor_shape_1": {
+          "reference": "front",
+          "normal": [
+            0,
+            0,
+            1
+          ],
+          "stack": [
+            [
+              "wood",
+              0.018
+            ],
+            [
+              "concrete",
+              0.18
+            ]
+          ]
+        },
+        "partition_south_inner": {
+          "reference": "front",
+          "normal": [
+            0,
+            1,
+            0
+          ],
+          "stack": [
+            [
+              "plasterboard",
+              0.01
+            ],
+            [
+              "brick",
+              0.09903
+            ],
+            [
+              "plasterboard",
+              0.01
+            ]
+          ]
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true,
+        "frequency_anchors": 5
+      }
+    },
+    "eligible": true,
+    "reason": "Обе нулевые CAD-плоскости получают физические плоскости отсчёта слоёв для воздуха и отделки."
+  },
+  "seated_coating": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true
+      },
+      "layers": {
+        "editor_shape_102": {
+          "reference": "center",
+          "normal": [
+            1,
+            0,
+            0
+          ],
+          "stack": [
+            [
+              "glass",
+              0.004
+            ],
+            [
+              {
+                "sheet_resistance_ohm": 12.4
+              },
+              3.3e-07
+            ],
+            [
+              "vacuum",
+              0.014
+            ],
+            [
+              "glass",
+              0.004
+            ]
+          ]
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "frequency_anchors": 5,
+        "diffraction_lit_region": true
+      }
+    },
+    "eligible": true,
+    "reason": "Возврат от оконного сектора различается в тени стульев и на открытой площади. Сравнение обычного и проводящего остекления при документированной опоре экрана."
+  },
+  "seated_wire_tilt": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "diffraction_lit_region": true,
+        "frequency_anchors": 5,
+        "tx_orientation": [
+          -0.05371172930323259,
+          0.09323722619458792,
+          0.0
+        ],
+        "rx_orientation": [
+          -0.702256931509007,
+          0.1366160176013937,
+          0.0
+        ]
+      },
+      "antennas": {
+        "tx": {
+          "low": 0.06378562936170212,
+          "high": 0.024516884036637227
+        },
+        "rx": {
+          "low": 0.06027190550864495,
+          "high": 0.025354571887686063
+        }
+      }
+    },
+    "eligible": true,
+    "reason": "Ориентация штырей по двум фотографиям совместно с угловой ДН по двум полосам и физической опорой экрана."
+  },
+  "seated_floor_ref": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "planar_slabs": true,
+        "side_screen_on_chair": true
+      },
+      "layers": {
+        "editor_shape_102": {
+          "reference": "center",
+          "stack": [
+            [
+              "glass",
+              0.004
+            ],
+            [
+              "vacuum",
+              0.014
+            ],
+            [
+              "glass",
+              0.004
+            ]
+          ]
+        },
+        "editor_shape_1": {
+          "reference": "front",
+          "normal": [
+            0,
+            0,
+            1
+          ],
+          "stack": [
+            [
+              "wood",
+              0.018
+            ],
+            [
+              "concrete",
+              0.18
+            ]
+          ]
+        }
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "frequency_anchors": 5,
+        "diffraction_lit_region": true
+      }
+    },
+    "eligible": true,
+    "reason": "Избыток вблизи волнового фронта пола в эксперименте NLOS требует проверки отражающей поверхности паркета с физической плоскостью отсчёта."
+  },
+  "seated_three_wb": {
+    "config": {
+      "geometry": {
+        "copper_screen": true,
+        "wall_material": "itu_brick",
+        "window_glass_m": 0.004,
+        "window_infill": true,
+        "metal_hutches": true,
+        "positioner": "gantry_carriage",
+        "side_screen_on_chair": true
+      },
+      "layers": {
+        "editor_shape_102": [
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ],
+          [
+            "vacuum",
+            0.014
+          ],
+          [
+            "glass",
+            0.004
+          ]
+        ]
+      },
+      "solver": {
+        "samples": 1000000,
+        "buffer": 1000000,
+        "max_depth": 8,
+        "frequency_anchors": 5,
+        "diffraction_lit_region": true
+      }
+    },
+    "eligible": true,
+    "reason": "Проверка неоднозначности числа листов при вычислении электрофизических свойств на нескольких частотах."
+  }
+}
